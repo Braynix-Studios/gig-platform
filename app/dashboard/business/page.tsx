@@ -21,10 +21,19 @@ export default async function BusinessDashboardPage() {
   let data: BusinessDashboardType | null = null;
   let issuePool: IssuePoolData | undefined;
   let reviews: SubmissionReview[] = [];
+  // Dashboard + issue pool are independent: fetch in parallel. allSettled
+  // (not all) preserves the graceful-degradation behavior below. Reviews
+  // stay sequential — they need the company resolved from the profile.
+  const [bizRes, poolRes] = await Promise.allSettled([
+    getBusinessDashboard(),
+    session?.userId
+      ? getIssuePoolData("business", session.userId)
+      : Promise.resolve(undefined),
+  ]);
   try {
-    const raw = await getBusinessDashboard();
+    const raw = bizRes.status === "fulfilled" ? bizRes.value : null;
     data = raw ?? null;
-    issuePool = session?.userId ? await getIssuePoolData("business", session.userId) : undefined;
+    issuePool = poolRes.status === "fulfilled" ? poolRes.value : undefined;
     reviews = session?.userId ? await getBusinessReviews(session.userId) : [];
   } catch {
     data = null;

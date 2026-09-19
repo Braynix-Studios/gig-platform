@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useActionState } from "react";
+import { useMemo, useOptimistic, useState, useActionState } from "react";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import type { IssuePoolIssue } from "@/lib/dashboard-data";
 import {
@@ -209,9 +209,10 @@ const INITIAL_STATE: DevLoopState = { ok: true };
 
 interface DevIssueActionsProps {
   issue: IssuePoolIssue;
+  onOptimistic: (taskId: string, kind: "claimed" | "submitted") => void;
 }
 
-function DevIssueActions({ issue }: DevIssueActionsProps) {
+function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
   const [claimState, claimAction, claimPending] = useActionState(claimIssueAction, INITIAL_STATE);
   const [submitState, submitAction, submitPending] = useActionState(submitPrAction, INITIAL_STATE);
 
@@ -226,7 +227,13 @@ function DevIssueActions({ issue }: DevIssueActionsProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
       {!issue.claimedByMe ? (
-        <form action={claimAction}>
+        <form
+          action={(formData) => {
+            // Instant UI feedback; the server revalidation confirms it.
+            onOptimistic(issue.id, "claimed");
+            claimAction(formData);
+          }}
+        >
           <input type="hidden" name="taskId" value={issue.id} />
           <button type="submit" disabled={claimPending} style={claimButtonStyle}>
             {claimPending ? "Claiming…" : "Claim issue"}
@@ -234,7 +241,10 @@ function DevIssueActions({ issue }: DevIssueActionsProps) {
         </form>
       ) : !issue.submittedByMe ? (
         <form
-          action={submitAction}
+          action={(formData) => {
+            onOptimistic(issue.id, "submitted");
+            submitAction(formData);
+          }}
           style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}
         >
           <input type="hidden" name="taskId" value={issue.id} />
@@ -315,9 +325,28 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
    const [skill, setSkill] = useState("all");
    const [difficulty, setDifficulty] = useState("all");
    const [sort, setSort] = useState<SortKey>("newest");
-const [page, setPage] = useState(1);
-   const [pageSize, setPageSize] = useState(5);
-   const base = role === "business" ? "/dashboard/business" : "/dashboard/developer";
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const base = role === "business" ? "/dashboard/business" : "/dashboard/developer";
+
+  // Optimistic list state: claims/submits reflect instantly while the
+  // server action + revalidation completes in the background.
+  type OptimisticUpdate = { taskId: string; kind: "claimed" | "submitted" };
+  const [optimisticIssues, markOptimistic] = useOptimistic(
+    data.issues,
+    (state: IssuePoolIssue[], update: OptimisticUpdate) =>
+      state.map((issue) =>
+        issue.id === update.taskId
+          ? {
+              ...issue,
+              claimedByMe: update.kind === "claimed" ? true : issue.claimedByMe,
+              submittedByMe: update.kind === "submitted" ? true : issue.submittedByMe,
+            }
+          : issue,
+      ),
+  );
+  const handleOptimistic = (taskId: string, kind: "claimed" | "submitted") =>
+    markOptimistic({ taskId, kind });
 
   const skills = useMemo(() => {
     const all = data.issues.map((issue) => issue.technology).filter((t): t is string => Boolean(t));
@@ -325,7 +354,7 @@ const [page, setPage] = useState(1);
   }, [data.issues]);
 
   const filtered = useMemo(() => {
-    let list = data.issues.filter((issue) => {
+    let list = optimisticIssues.filter((issue) => {
       if (query.trim()) {
         const q = query.trim().toLowerCase();
         const haystack = `${issue.title} ${issue.repo} ${issue.tags.join(" ")} ${issue.description ?? ""}`.toLowerCase();
@@ -353,7 +382,7 @@ const [page, setPage] = useState(1);
         break;
     }
     return list;
-  }, [data.issues, query, skill, difficulty, sort]);
+  }, [optimisticIssues, query, skill, difficulty, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -637,7 +666,7 @@ const [page, setPage] = useState(1);
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-                      {role === "developer" && <DevIssueActions issue={issue} />}
+                      {role === "developer" && <DevIssueActions issue={issue} onOptimistic={handleOptimistic} />}
                       {issue.technology && <TechChip label={issue.technology} />}
                       <DifficultyChip label={issue.difficulty} />
                       <span style={{ fontSize: 15, fontWeight: 800, color: GREEN, whiteSpace: "nowrap" }}>{currency(issue.reward)}</span>

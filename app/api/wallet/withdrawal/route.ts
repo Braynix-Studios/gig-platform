@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, newBalance: result.newBalance ?? null });
   } catch (error) {
     console.error("Withdrawal error:", error);
     return NextResponse.json(

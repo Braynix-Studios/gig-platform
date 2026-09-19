@@ -1,11 +1,13 @@
 import DashboardSidebar from "@/components/DashboardSidebar";
 import MobileDashboardNav from "@/components/MobileDashboardNav";
+import { StatsSkeleton, TableSkeleton } from "@/components/skeletons";
 import { getSession } from "@/lib/session";
 import {
   getSidebarStats,
   normalizeDisplayName,
   normalizeEmail,
 } from "@/lib/dashboard-data";
+import { Suspense } from "react";
 
 export default async function DashboardLayout({
   children,
@@ -40,7 +42,18 @@ export default async function DashboardLayout({
           stats={stats}
         />
         <main className="flex-1 min-w-0 overflow-y-auto">
-          {children}
+          {/* Page segments resolve independently: the sidebar shell paints
+              first while page data streams in behind this skeleton. */}
+          <Suspense
+            fallback={
+              <div style={{ padding: 24, display: "grid", gap: 20, alignContent: "start" }}>
+                <StatsSkeleton />
+                <TableSkeleton rows={4} />
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
         </main>
       </div>
     </div>
