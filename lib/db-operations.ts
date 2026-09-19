@@ -434,11 +434,14 @@ export async function upsertUser(
         email: user.email ?? "",
         avatar_url: user.avatar_url ?? null,
       },
-      { onConflict: "github_id", ignoreDuplicates: false },
+      { onConflict: "id", ignoreDuplicates: false },
     )
     .select()
     .maybeSingle();
-  if (error) return null;
+  if (error) {
+    console.error("[upsertUser] Supabase error:", error.message, error.details, error.hint);
+    return null;
+  }
   return data;
 }
 
