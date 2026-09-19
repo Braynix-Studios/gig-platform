@@ -434,7 +434,7 @@ export async function upsertUser(
         email: user.email ?? "",
         avatar_url: user.avatar_url ?? null,
       },
-      { onConflict: "github_id", ignoreDuplicates: false },
+      { onConflict: "id", ignoreDuplicates: false },
     )
     .select()
     .maybeSingle();
