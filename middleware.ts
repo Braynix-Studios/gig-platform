@@ -33,7 +33,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Only dashboard routes need the session check. Marketing, auth, api,
+  // and static assets skip middleware entirely (no edge overhead).
+  // Dashboard server layouts re-verify the session, so coverage is retained.
   matcher: [
-    '/((?!api|_next/static|_next/image|.*\\.png$).*)',
+    '/dashboard/:path*',
   ],
 };

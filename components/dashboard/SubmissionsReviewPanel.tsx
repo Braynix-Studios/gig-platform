@@ -37,6 +37,7 @@ function ReviewRow({ review }: { review: SubmissionReview }) {
         padding: "16px 20px",
         borderTop: `1px solid ${BORDER}`,
         flexWrap: "wrap",
+        opacity: pending ? 0.55 : 1,
       }}
     >
       <div style={{ minWidth: 0, flex: "1 1 320px" }}>
@@ -136,6 +137,20 @@ function ReviewRow({ review }: { review: SubmissionReview }) {
             Reject
           </button>
         </form>
+        {pending && (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: MUTED,
+              lineHeight: 1.4,
+              maxWidth: 340,
+              textAlign: "right",
+            }}
+          >
+            Submitting decision…
+          </span>
+        )}
         {state?.message && (
           <span
             style={{

@@ -39,8 +39,8 @@ export async function GET() {
       );
     }
 
-    // Get transactions
-    const walletTransactions = await getWalletTransactions(userId);
+    // Get transactions (reuse the wallet id — avoids a second wallets read)
+    const walletTransactions = await getWalletTransactions(userId, null, wallet.id);
 
     // Map to DevTransaction format
     const transactions = walletTransactions
