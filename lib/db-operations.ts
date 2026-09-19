@@ -433,7 +433,6 @@ export async function upsertUser(
         username: user.username ?? "",
         email: user.email ?? "",
         avatar_url: user.avatar_url ?? null,
-        role: user.role ?? "developer",
       },
       { onConflict: "github_id", ignoreDuplicates: false },
     )
