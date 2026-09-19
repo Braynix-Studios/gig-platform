@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { createSupabaseServerClient, isSupabaseConfigured, type SupabaseCookieMethods } from '@/lib/supabaseClient';
+import { createSupabaseServerClient, isSupabaseConfigured, supabaseAdmin, type SupabaseCookieMethods } from '@/lib/supabaseClient';
 import { createSession as createSupabaseSession } from '@/lib/supabaseAuth';
 import {
   upsertUser,
@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
         // Persist the Supabase session in SSR cookies.
         await createSupabaseSession(session);
 
+        // DB writes below run as the service role: the `authenticated` role
+        // cannot write `role`/`github_id`/`email`/`company` (migrations
+        // 0002/0003/0005), and the identity here is already verified via
+        // the code exchange. Falls back to the user-scoped client if no
+        // service key is configured.
+        const dbClient = supabaseAdmin ?? supabase;
+
         const {
           data: { user },
           error: userError,
@@ -65,17 +72,18 @@ export async function GET(request: NextRequest) {
           // connects GitHub keeps their role), then user_metadata, then developer.
           let role = user.user_metadata?.role || 'developer';
           const existingByGithub = githubId
-            ? await getUserByGithubId(githubId, supabase)
+            ? await getUserByGithubId(githubId, dbClient)
             : null;
           const existingProfile =
             existingByGithub ??
-            (user.email ? await getUserByEmail(user.email, supabase) : null);
+            (user.email ? await getUserByEmail(user.email, dbClient) : null);
           if (existingProfile?.role) {
             role = existingProfile.role;
           }
           finalRole = role;
 
-          // User-scoped upsert (RLS allows users to insert/update their own row).
+          // Server-side upsert (service role): links github_id and assigns
+            // the resolved role, which user-scoped clients cannot write.
           const profile = await upsertUser(
             {
               id: user.id,
@@ -85,7 +93,7 @@ export async function GET(request: NextRequest) {
               avatar_url: user.user_metadata?.avatar_url,
               role,
             },
-            supabase,
+            dbClient,
           );
 
           if (profile) {
@@ -96,7 +104,7 @@ export async function GET(request: NextRequest) {
                 session.provider_token,
                 githubId,
                 githubHandle,
-                supabase,
+                dbClient,
               ).catch((syncErr) => {
                 console.error('[GitHub OAuth Callback] Profile sync failed', syncErr);
               });

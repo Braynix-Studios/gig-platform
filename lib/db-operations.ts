@@ -433,6 +433,11 @@ export async function upsertUser(
         username: user.username ?? "",
         email: user.email ?? "",
         avatar_url: user.avatar_url ?? null,
+        // role is only written when explicitly provided: the `authenticated`
+        // role has INSERT/UPDATE on `role` revoked (migration 0002), so
+        // user-scoped callers must never send it. Server-side flows using
+        // the service role pass it explicitly.
+        ...(user.role !== undefined ? { role: user.role } : {}),
       },
       { onConflict: "id", ignoreDuplicates: false },
     )
