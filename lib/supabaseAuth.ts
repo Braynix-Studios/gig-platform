@@ -61,10 +61,13 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieMethods = await getSSRCookieMethods();
   const supabase = createSupabaseServerClient(cookieMethods);
 
-  const { data: { user }, error } = await supabase.auth.getUser();
+  // getUser (network) and getSession (local cookie read) are independent.
+  const [{ data: { user }, error }, { data: { session } }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.auth.getSession(),
+  ]);
   if (error || !user) return null;
 
-  const { data: { session } } = await supabase.auth.getSession();
   const expiresAt = session?.expires_at ? session.expires_at * 1000 : Date.now() + MAX_AGE * 1000;
 
   // BUG-001 FIX: Read verified role and profile from public.users rather than mutable metadata

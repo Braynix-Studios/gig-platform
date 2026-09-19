@@ -828,9 +828,11 @@ const [formValues, setFormValues] = useState<{
     fetchWallet();
   }, []); // Empty deps means run once on mount
 
-  // Refetch wallet data (used after successful withdrawal)
-  const refetchWallet = async () => {
-    setWalletLoading(true);
+  // Refetch wallet data (used after successful withdrawal).
+  // Silent mode refreshes in the background without flashing stale
+  // prop data (walletLoading swaps the display source — see below).
+  const refetchWallet = async (silent = false) => {
+    if (!silent) setWalletLoading(true);
     try {
       const response = await fetch(`/api/wallet`, {
         method: "GET",
@@ -842,11 +844,19 @@ const [formValues, setFormValues] = useState<{
       const json = await response.json();
       setWalletData(json);
     } catch {
-      setWalletData(null);
+      if (!silent) setWalletData(null);
     } finally {
-      setWalletLoading(false);
+      if (!silent) setWalletLoading(false);
     }
   };
+
+  function formatINR(amount: number): string {
+    const formatted = new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.abs(amount));
+    return `₹${formatted}`;
+  }
 
   // Handle withdrawal form submission
   const handleWithdrawalSubmit = async (e: FormEvent) => {
@@ -877,11 +887,16 @@ const [formValues, setFormValues] = useState<{
         throw new Error(errorData.error || "Withdrawal failed");
       }
 
-      // Success
+      // Success: patch the displayed balance instantly from the server's
+      // authoritative new balance, then quietly refresh transactions behind it.
+      const result = await response.json();
+      if (typeof result.newBalance === "number") {
+        const patched = formatINR(result.newBalance);
+        setWalletData((prev) => (prev ? { ...prev, balance: patched } : prev));
+      }
       setWithdrawalSuccess(true);
       setWithdrawalAmount("");
-      // Refetch wallet data to update balance and transactions
-      await refetchWallet();
+      void refetchWallet(true);
     } catch (err: unknown) {
       setWithdrawalError(getErrorMessage(err));
     } finally {

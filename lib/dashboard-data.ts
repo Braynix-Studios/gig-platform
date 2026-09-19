@@ -151,17 +151,20 @@ export async function getSidebarStats(role: DashboardRole, userId?: string): Pro
     }
   }
 
-  const dev = await getDeveloperStats(userId);
-  let issuePoolCount = 0;
+  // Independent sources: stats + open-task count resolve in parallel.
   const db = supabaseAdmin !== supabase ? supabaseAdmin : null;
-  if (db) {
-    try {
-      const poolRes = await db.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'open');
-      issuePoolCount = poolRes.count ?? 0;
-    } catch {
-      issuePoolCount = 0;
-    }
-  }
+  const [dev, issuePoolCount] = await Promise.all([
+    getDeveloperStats(userId),
+    (async () => {
+      if (!db) return 0;
+      try {
+        const poolRes = await db.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'open');
+        return poolRes.count ?? 0;
+      } catch {
+        return 0;
+      }
+    })(),
+  ]);
   return {
     walletLabel: 'GIG Wallet',
     walletValue: dev.walletBalance,
@@ -346,11 +349,16 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
 
   if (client) {
     try {
-      const { data: { user } } = await client.auth.getUser();
+      // getUser and the task list are independent: resolve in parallel.
+      const [userRes, tasks] = await Promise.all([
+        client.auth.getUser(),
+        getOpenTasks({}, client),
+      ]);
+      const user = userRes.data?.user;
       if (user) {
         githubHandle = user.user_metadata?.github_handle || user.user_metadata?.github_id || null;
       }
-      openTasks = await getOpenTasks({}, client);
+      openTasks = tasks;
     } catch {
       // fall through to fallback
     }
@@ -554,12 +562,15 @@ export async function getIssuePoolData(
     const claimedTaskIds = new Set<string>();
     const submittedTaskIds = new Set<string>();
     if (role === 'developer') {
-      const claims = await getClaimsByUser(userId, client);
+      // Claims and submissions are independent of each other: fetch in parallel.
+      const [claims, submissions] = await Promise.all([
+        getClaimsByUser(userId, client),
+        getSubmissionsByUser(userId, client),
+      ]);
       const active = claims.filter((c) => c.status === 'active');
       claimedByMe = active.length;
       claimedTotal = claimedByMe;
       active.forEach((c) => claimedTaskIds.add(c.task_id));
-      const submissions = await getSubmissionsByUser(userId, client);
       submissions.forEach((s) => submittedTaskIds.add(s.task_id));
     } else {
       claimedTotal = await countActiveClaimsForTasks(

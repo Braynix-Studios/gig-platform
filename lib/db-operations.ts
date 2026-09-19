@@ -307,7 +307,7 @@ export interface DebitWalletInput {
 export async function debitWallet(
   input: DebitWalletInput,
   clientOverride?: SupabaseClient | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
 
@@ -340,7 +340,8 @@ export async function debitWallet(
     .maybeSingle();
 
   if (existingTx) {
-    return { ok: true };
+    // Idempotent replay: no debit happened, balance is unchanged.
+    return { ok: true, newBalance: availableBalance };
   }
 
   // Update wallet by subtracting the amount
@@ -368,7 +369,7 @@ export async function debitWallet(
 
   if (txError) return { ok: false, error: txError.message };
 
-  return { ok: true };
+  return { ok: true, newBalance: availableBalance - input.amount };
 }
 
 export async function getUserByGithubId(
@@ -433,13 +434,20 @@ export async function upsertUser(
         username: user.username ?? "",
         email: user.email ?? "",
         avatar_url: user.avatar_url ?? null,
-        role: user.role ?? "developer",
+        // role is only written when explicitly provided: the `authenticated`
+        // role has INSERT/UPDATE on `role` revoked (migration 0002), so
+        // user-scoped callers must never send it. Server-side flows using
+        // the service role pass it explicitly.
+        ...(user.role !== undefined ? { role: user.role } : {}),
       },
-      { onConflict: "github_id", ignoreDuplicates: false },
+      { onConflict: "id", ignoreDuplicates: false },
     )
     .select()
     .maybeSingle();
-  if (error) return null;
+  if (error) {
+    console.error("[upsertUser] Supabase error:", error.message, error.details, error.hint);
+    return null;
+  }
   return data;
 }
 
@@ -710,15 +718,17 @@ export async function getWalletByUser(
 export async function getWalletTransactions(
   userId: string,
   clientOverride?: SupabaseClient | null,
+  walletId?: string | null,
 ): Promise<WalletTransaction[]> {
   const client = clientOverride ?? db();
   if (!client) return [];
-  const wallet = await getWalletByUser(userId, client);
-  if (!wallet) return [];
+  // Skip the extra wallets read when the caller already has the wallet id.
+  const wallet_id = walletId ?? (await getWalletByUser(userId, client))?.id;
+  if (!wallet_id) return [];
   const { data, error } = await client
     .from("wallet_transactions")
     .select()
-    .eq("wallet_id", wallet.id)
+    .eq("wallet_id", wallet_id)
     .order("created_at", { ascending: false });
   if (error) return [];
   return data ?? [];

@@ -100,18 +100,28 @@ export default async function DeveloperDashboardPage() {
   let issuePool: IssuePoolData | undefined;
 
   if (session?.userId) {
-    try {
-      const raw = await getDeveloperDashboard(session.userId);
-      // Only render live data when a real profile exists in the DB;
-      // otherwise fall back to the demo dashboard so the prototype stays alive.
-      if (raw.profile?.user) {
-        data = mapDashboardData(raw);
+    // Independent sources: fetch in parallel. allSettled (not all) preserves
+    // the graceful-degradation behavior below — one failing source must not
+    // blank the other.
+    const [dashRes, poolRes] = await Promise.allSettled([
+      getDeveloperDashboard(session.userId),
+      getIssuePoolData("developer", session.userId),
+    ]);
+    if (dashRes.status === "fulfilled") {
+      try {
+        const raw = dashRes.value;
+        // Only render live data when a real profile exists in the DB;
+        // otherwise fall back to the demo dashboard so the prototype stays alive.
+        if (raw.profile?.user) {
+          data = mapDashboardData(raw);
+        }
+      } catch {
+        data = undefined;
       }
-      issuePool = await getIssuePoolData("developer", session.userId);
-    } catch {
+    } else {
       data = undefined;
-      issuePool = undefined;
     }
+    issuePool = poolRes.status === "fulfilled" ? poolRes.value : undefined;
   }
 
   return <DeveloperDashboard data={data} issuePool={issuePool} />;
