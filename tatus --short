@@ -1,0 +1,155 @@
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 734994f..d96c99a 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -1 +1,252 @@[m
+[31m-# gig-platform[m
+[32m+[m[32m<p align="center">[m
+[32m+[m[32m  <img src="public/gig-logo.png" alt="GIG — Get In Git" height="80" />[m
+[32m+[m[32m</p>[m
+[32m+[m
+[32m+[m[32m<h1 align="center">GIG — Get In Git</h1>[m
+[32m+[m
+[32m+[m[32m<p align="center">[m
+[32m+[m[32m  <strong>A gig economy platform connecting developers with paid open-source tasks</strong>[m
+[32m+[m[32m</p>[m
+[32m+[m
+[32m+[m[32m<p align="center">[m
+[32m+[m[32m  <a href="#features">Features</a> •[m
+[32m+[m[32m  <a href="#tech-stack">Tech Stack</a> •[m
+[32m+[m[32m  <a href="#getting-started">Getting Started</a> •[m
+[32m+[m[32m  <a href="#project-structure">Project Structure</a> •[m
+[32m+[m[32m  <a href="#database">Database</a> •[m
+[32m+[m[32m  <a href="#testing">Testing</a> •[m
+[32m+[m[32m  <a href="#deployment">Deployment</a> •[m
+[32m+[m[32m  <a href="#contributing">Contributing</a> •[m
+[32m+[m[32m  <a href="#license">License</a>[m
+[32m+[m[32m</p>[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## What is GIG?[m
+[32m+[m
+[32m+[m[32mGIG is a platform that breaks developers out of tutorial purgatory by connecting them with curated engineering tasks from real open-source repositories and business backlogs. Developers claim scoped issues, submit pull requests through standard GitHub workflows, survive maintainer code review, and earn wallet bounties — building an inspectable, evidence-backed engineering record instead of a self-declared résumé.[m
+[32m+[m
+[32m+[m[32m**For Developers:** Discover tasks filtered by stack and difficulty, lock issues exclusively for 48 hours, submit real GitHub PRs, earn reputation, and withdraw earnings via UPI.[m
+[32m+[m
+[32m+[m[32m**For Businesses:** Publish engineering work from your backlogs, review PR submissions, approve contributions, and access a pool of verified talent.[m
+[32m+[m
+[32m+[m[32m> **Status:** Alpha v0.1 — Under active development. Not yet production-ready.[m
+[32m+[m
+[32m+[m[32m## Features[m
+[32m+[m
+[32m+[m[32m- **GitHub OAuth Authentication** — Sign in with GitHub, syncing profile data (bio, avatar, repos, followers)[m
+[32m+[m[32m- **Dual-Role System** — Separate dashboards and workflows for developers and businesses[m
+[32m+[m[32m- **Issue Pool** — Browse curated tasks across opted-in repositories, filtered by technology and difficulty tier[m
+[32m+[m[32m- **Task Claiming** — Lock a task exclusively for 48 hours with single-claim enforcement[m
+[32m+[m[32m- **PR Submission & Review** — Submit GitHub pull request URLs; businesses review and approve/reject[m
+[32m+[m[32m- **Contribution Tracking** — Verified contributions linked to actual merged PRs[m
+[32m+[m[32m- **Wallet & Withdrawals** — Earned bounties tracked in an INR wallet with UPI withdrawal (₹500 minimum)[m
+[32m+[m[32m- **Reputation System** — 0–100 score derived from verified contributions[m
+[32m+[m[32m- **Row-Level Security** — Supabase RLS policies enforce data access at the database level[m
+[32m+[m[32m- **Legacy Demo Mode** — Local HMAC-based sessions for development without Supabase credentials[m
+[32m+[m
+[32m+[m[32m## Tech Stack[m
+[32m+[m
+[32m+[m[32m| Layer | Technology |[m
+[32m+[m[32m|-------|-----------|[m
+[32m+[m[32m| **Framework** | [Next.js 16](https://nextjs.org/) (App Router) |[m
+[32m+[m[32m| **Language** | [TypeScript 5](https://www.typescriptlang.org/) |[m
+[32m+[m[32m| **UI** | [React 19](https://react.dev/) |[m
+[32m+[m[32m| **Styling** | [Tailwind CSS 4](https://tailwindcss.com/) |[m
+[32m+[m[32m| **Database** | [Supabase](https://supabase.com/) (PostgreSQL with RLS) |[m
+[32m+[m[32m| **Auth** | Supabase Auth + GitHub OAuth |[m
+[32m+[m[32m| **Testing** | [Vitest](https://vitest.dev/) |[m
+[32m+[m[32m| **Package Manager** | npm |[m
+[32m+[m[32m| **Deployment** | [Vercel](https://vercel.com/) |[m
+[32m+[m
+[32m+[m[32m## Getting Started[m
+[32m+[m
+[32m+[m[32m### Prerequisites[m
+[32m+[m
+[32m+[m[32m- [Node.js](https://nodejs.org/) 20+[m
+[32m+[m[32m- npm 10+[m
+[32m+[m[32m- A [Supabase](https://supabase.com/) project (for production auth and database)[m
+[32m+[m
+[32m+[m[32m### Installation[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# Clone the repository[m
+[32m+[m[32mgit clone https://github.com/pranjal2410719/GIG.git[m
+[32m+[m[32mcd GIG[m
+[32m+[m
+[32m+[m[32m# Install dependencies[m
+[32m+[m[32mnpm install[m
+[32m+[m
+[32m+[m[32m# Copy environment template[m
+[32m+[m[32mcp .env.example .env.local[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### Configuration[m
+[32m+[m
+[32m+[m[32mEdit `.env.local` with your credentials. See [`.env.example`](.env.example) for all available variables.[m
+[32m+[m
+[32m+[m[32m**Required for Supabase auth:**[m
+[32m+[m[32m| Variable | Description |[m
+[32m+[m[32m|----------|-------------|[m
+[32m+[m[32m| `SUPABASE_URL` | Your Supabase project URL |[m
+[32m+[m[32m| `SUPABASE_ANON_KEY` | Supabase anon/publishable key (browser-safe, RLS enforced) |[m
+[32m+[m[32m| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only, bypasses RLS) |[m
+[32m+[m[32m| `NEXT_PUBLIC_SUPABASE_URL` | Same as `SUPABASE_URL` (exposed to client) |[m
+[32m+[m[32m| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same as `SUPABASE_ANON_KEY` (exposed to client) |[m
+[32m+[m[32m| `SESSION_SECRET` | HMAC session signing secret — generate with `openssl rand -base64 32` |[m
+[32m+[m
+[32m+[m[32m**Optional for local development without Supabase:**[m
+[32m+[m[32m| Variable | Description |[m
+[32m+[m[32m|----------|-------------|[m
+[32m+[m[32m| `ENABLE_LEGACY_SESSION` | Set `"true"` to enable local demo login (never honored in production) |[m
+[32m+[m[32m| `TEST_DEV_EMAIL` / `TEST_DEV_PASSWORD` | Demo developer credentials |[m
+[32m+[m[32m| `TEST_BIZ_EMAIL` / `TEST_BIZ_PASSWORD` | Demo business credentials |[m
+[32m+[m
+[32m+[m[32m### Database Setup[m
+[32m+[m
+[32m+[m[32m1. Create a Supabase project at [supabase.com](https://supabase.com)[m
+[32m+[m[32m2. Run the migrations in the Supabase SQL Editor, in order:[m
+[32m+[m
+[32m+[m[32m```sql[m
+[32m+[m[32m-- 1. supabase/migrations/0000_init.sql          (tables + base RLS)[m
+[32m+[m[32m-- 2. supabase/migrations/0001_github_profile.sql (GitHub profile columns)[m
+[32m+[m[32m-- 3. supabase/migrations/0002_rls_integrity.sql  (RLS lockdown + unique constraints)[m
+[32m+[m[32m-- 4. supabase/migrations/0003_rls_privilege_lockdown.sql (privilege hardening)[m
+[32m+[m[32m-- 5. supabase/migrations/0004_wallet_tx_nullable_task.sql (withdrawal support)[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mOr push via the Supabase CLI:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mnpm run db:push[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m3. Seed the database with demo data:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mnpm run seed[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### Development[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mnpm run dev[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mOpen [http://localhost:3000](http://localhost:3000) to see the application.[m
+[32m+[m
+[32m+[m[32m### GitHub OAuth Setup[m
+[32m+[m
+[32m+[m[32m1. Enable **GitHub** under **Authentication → Providers** in your Supabase dashboard[m
+[32m+[m[32m2. Configure the OAuth callback URL to match your `NEXT_PUBLIC_BASE_URL` (e.g., `http://localhost:3000`)[m
+[32m+[m[32m3. Users can sign in with GitHub on the auth page, or connect their GitHub account from the developer dashboard[m
+[32m+[m
+[32m+[m[32m> If Supabase is not configured and `ENABLE_LEGACY_SESSION=true`, the app falls back to local demo login (`dev@gig.dev` / `biz@gig.dev`). This fallback is hard-disabled in production.[m
+[32m+[m
+[32m+[m[32m## Project Structure[m
+[32m+[m
+[32m+[m[32m```[m
+

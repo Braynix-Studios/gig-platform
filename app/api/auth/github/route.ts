@@ -1,0 +1,35 @@
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { createSupabaseServerClient, isSupabaseConfigured, type SupabaseCookieMethods } from '@/lib/supabaseClient';
+
+export async function GET() {
+  if (!isSupabaseConfigured) {
+    redirect('/auth');
+  }
+
+  const cookieStore = await cookies();
+  const cookieMethods: SupabaseCookieMethods = {
+    getAll: () => cookieStore.getAll().map((c) => ({ name: c.name, value: c.value })),
+    setAll: (cookiesToSet) => {
+      cookiesToSet.forEach(({ name, value, options }) => {
+        cookieStore.set(name, value, options);
+      });
+    },
+  };
+  const supabase = createSupabaseServerClient(cookieMethods);
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'github',
+    options: { redirectTo: `${baseUrl}/api/auth/github/callback` },
+  });
+
+  if (error || !data.url) {
+    const providerDisabled =
+      error?.message?.toLowerCase().includes('provider') ||
+      error?.message?.toLowerCase().includes('not enabled');
+    redirect(`/auth?error=${providerDisabled ? 'provider_disabled' : 'oauth_failed'}`);
+  }
+
+  redirect(data.url);
+}

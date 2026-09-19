@@ -1,0 +1,71 @@
+# =============================================================================
+# GIG Platform — .gitignore
+# =============================================================================
+
+# ---------- Dependencies ----------
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------- Testing ----------
+/coverage
+
+# ---------- Next.js ----------
+/.next/
+/out/
+
+# ---------- Production build ----------
+/build
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ---------- Certificates ----------
+*.pem
+
+# ---------- Debug logs ----------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---------- Environment / Secrets ----------
+.env
+.env*.local
+!.env.example
+
+# ---------- Vercel ----------
+.vercel
+
+# ---------- TypeScript ----------
+*.tsbuildinfo
+next-env.d.ts
+
+# ---------- AI agent tooling (local-only) ----------
+.kilo/
+.project_brain/
+.freebuff/
+CLAUDE.md
+AGENTS.md
+
+# ---------- Supabase CLI local state ----------
+supabase/.temp/
+
+# ---------- IDE / Editor ----------
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+# ---------- Audit scratch (local-only) ----------
+ALPHA-AUDIT-REPORT.md
+ALPHA-AUDIT-REPORT.pdf
