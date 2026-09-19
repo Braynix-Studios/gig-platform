@@ -20,7 +20,14 @@ export async function proxy(request: NextRequest) {
 
   const supabase = createSupabaseServerClient(cookieMethods);
 
-  await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  // BUG-006 FIX: Protect /dashboard routes at the edge proxy layer
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth', request.url));
+    }
+  }
 
   return response;
 }

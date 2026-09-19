@@ -17,9 +17,6 @@ export default async function BusinessDashboardPage() {
   if (session.role !== "business") {
     redirect("/dashboard/developer");
   }
-  if (!session.githubId) {
-    redirect("/auth/business?error=github_required");
-  }
 
   let data: BusinessDashboardType | null = null;
   let issuePool: IssuePoolData | undefined;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClientWithCookies } from "@/lib/supabaseClient";
-import { getSession } from "@/lib/supabaseAuth";
+import { getSession } from "@/lib/session";
 import { debitWallet } from "@/lib/db-operations";
 
 export async function POST(request: Request) {

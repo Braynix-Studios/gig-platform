@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClientWithCookies } from "@/lib/supabaseClient";
-import { getSession } from "@/lib/supabaseAuth";
+import { getSession } from "@/lib/session";
 import { getRepositories, getUserById } from "@/lib/db-operations";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -32,6 +32,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const repo = repositories.find((r) => r.id === repository_id);
     if (!repo) {
       return NextResponse.json({ error: "Repository not found or access denied" }, { status: 403 });
+    }
+
+    // BUG-004 FIX: Deduct sponsor escrow balance upfront when creating task
+    if (reward_amount && reward_amount > 0) {
+      const { debitWallet } = await import('@/lib/db-operations');
+      const debitResult = await debitWallet({
+        userId: session.userId,
+        amount: reward_amount,
+        currency: reward_currency || "INR"
+      }, supabase);
+      
+      if (!debitResult.ok) {
+        return NextResponse.json({ error: `Insufficient escrow balance: ${debitResult.error}` }, { status: 400 });
+      }
     }
 
     const { data: task, error } = await supabase
