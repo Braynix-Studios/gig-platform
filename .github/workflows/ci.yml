@@ -1,15 +1,30 @@
 name: CI
 
+# Guards both deploy branches: Vercel builds `main`, Netlify builds `develop`.
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
+
+# Least privilege: jobs only read the repo. (No deploys happen here —
+# Vercel/Netlify deploy from these branches via their own integrations.)
+permissions:
+  contents: read
+
+# Cancel superseded runs on rapid pushes to the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  NEXT_TELEMETRY_DISABLED: 1
 
 jobs:
-  build-and-test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,29 +32,105 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Cache Node modules
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Linter
+      - name: Run ESLint
         run: npm run lint
 
-      - name: Run Tests
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tsc --noEmit
+        run: npm run typecheck
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest
         run: npm test
 
-      - name: Build Project
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build with Next.js
         run: npm run build
         env:
-          SUPABASE_URL: "https://placeholder.supabase.co"
-          SUPABASE_ANON_KEY: "placeholder-anon-key"
-          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key"
+          # Dummy values that lib/supabaseClient.ts recognises as
+          # "not configured" (isConfigured rejects the `your-` prefix),
+          # so the build exercises the same unconfigured-Supabase path
+          # as a fresh checkout instead of hitting a real project.
+          SUPABASE_URL: "your-supabase-project-url"
+          SUPABASE_ANON_KEY: "your-supabase-anon-or-publishable-key"
+          NEXT_PUBLIC_SUPABASE_URL: "your-supabase-project-url"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "your-supabase-anon-or-publishable-key"
+          SUPABASE_SERVICE_ROLE_KEY: "your-supabase-secret-key"
+          # Non-default dummy so the production SESSION_SECRET guard in
+          # lib/session-token.ts never trips during `next build`
+          # (NODE_ENV=production). Real secret lives in the deploy platforms.
+          SESSION_SECRET: "ci-dummy-secret-not-used-for-production"
+
+  audit:
+    name: Audit (advisory)
+    runs-on: ubuntu-latest
+    # Advisory only: surfaces production-dependency vulnerabilities
+    # without blocking merges. Flip to blocking (remove continue-on-error)
+    # once the baseline is clean and triaged.
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

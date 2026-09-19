@@ -22,6 +22,9 @@ vi.mock('../lib/supabaseClient', () => ({
   supabase: mockSupabase,
   supabaseAdmin: mockSupabase,
   createServerClientWithCookies: vi.fn().mockResolvedValue(mockSupabase),
+  // lib/session.ts reads this flag before delegating to supabaseAuth;
+  // omitting it throws and turns every route test into a 500.
+  isSupabaseConfigured: true,
 }));
 
 vi.mock('../lib/supabaseAuth', () => ({
@@ -39,6 +42,7 @@ type MockSupabaseClientModule = {
   supabase: MockSupabase | null;
   supabaseAdmin: MockSupabase | null;
   createServerClientWithCookies: ReturnType<typeof vi.fn>;
+  isSupabaseConfigured: boolean;
 };
 
 type MockSupabaseAuthModule = {
