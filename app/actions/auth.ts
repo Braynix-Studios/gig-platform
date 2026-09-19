@@ -120,7 +120,14 @@ export async function loginAction(
   }
 
   await createSessionWithSupabase(signInResult.session);
-  redirect(targetDashboard);
+
+  // BUG-005 FIX: Derive redirect path from actual authenticated DB role, not client form data
+  const { getSession } = await import('@/lib/session');
+  const session = await getSession();
+  const dbRole = session?.role || 'developer';
+  const finalDashboard = dbRole === 'business' ? '/dashboard/business' : '/dashboard/developer';
+
+  redirect(finalDashboard);
 }
 
 export async function logoutAction(): Promise<void> {

@@ -152,4 +152,108 @@
 [32m+[m[32m## Project Structure[m
 [32m+[m
 [32m+[m[32m```[m
-
+[32m+[m[32m├── app/[m
+[32m+[m[32m│   ├── (marketing)/          # Landing page (route group)[m
+[32m+[m[32m│   ├── actions/              # Server actions (auth, dev-loop, business-loop)[m
+[32m+[m[32m│   ├── api/                  # API routes (auth, profile, tasks, wallet)[m
+[32m+[m[32m│   ├── auth/                 # Auth pages (business, developer)[m
+[32m+[m[32m│   ├── dashboard/            # Dashboard pages (business, developer)[m
+[32m+[m[32m│   ├── globals.css           # Global styles[m
+[32m+[m[32m│   └── layout.tsx            # Root layout[m
+[32m+[m[32m├── components/[m
+[32m+[m[32m│   ├── dashboard/            # Dashboard-specific components[m
+[32m+[m[32m│   └── *.tsx                 # Shared components (Navbar, Footer, AuthForm, etc.)[m
+[32m+[m[32m├── lib/[m
+[32m+[m[32m│   ├── db-operations.ts      # Database CRUD operations[m
+[32m+[m[32m│   ├── session.ts            # Session management (Supabase + legacy HMAC)[m
+[32m+[m[32m│   ├── session-token.ts      # HMAC token signing/verification[m
+[32m+[m[32m│   ├── supabaseClient.ts     # Supabase client initialization[m
+[32m+[m[32m│   ├── supabaseAuth.ts       # Supabase auth operations[m
+[32m+[m[32m│   ├── dashboard-data.ts     # Dashboard data aggregation[m
+[32m+[m[32m│   ├── dashboard-stats-defaults.ts  # Default/fallback dashboard stats[m
+[32m+[m[32m│   └── seed.ts               # Database seeding script[m
+[32m+[m[32m├── public/                   # Static assets (logo)[m
+[32m+[m[32m├── supabase/[m
+[32m+[m[32m│   ├── config.toml           # Supabase CLI config[m
+[32m+[m[32m│   └── migrations/           # SQL migration files (5 migrations)[m
+[32m+[m[32m├── tests/                    # Vitest test files[m
+[32m+[m[32m├── proxy.ts                  # Next.js 16 proxy (session refresh middleware)[m
+[32m+[m[32m└── package.json[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m## Database[m
+[32m+[m
+[32m+[m[32mGIG uses Supabase PostgreSQL with Row-Level Security. The schema includes:[m
+[32m+[m
+[32m+[m[32m| Table | Purpose |[m
+[32m+[m[32m|-------|---------|[m
+[32m+[m[32m| `users` | User profiles linked to `auth.users` via FK |[m
+[32m+[m[32m| `repositories` | GitHub repositories opted in to the platform |[m
+[32m+[m[32m| `tasks` | Bounty tasks tied to repositories |[m
+[32m+[m[32m| `claims` | Developer task claims (48h exclusive lock) |[m
+[32m+[m[32m| `submissions` | PR submissions for claimed tasks |[m
+[32m+[m[32m| `contributions` | Verified contributions (post-merge) |[m
+[32m+[m[32m| `wallets` | User wallet balances |[m
+[32m+[m[32m| `wallet_transactions` | Transaction ledger (credits, withdrawals) |[m
+[32m+[m
+[32m+[m[32mAll tables have RLS enabled with policies scoped to `auth.uid()`. Privilege escalation is prevented by revoking mutation access to sensitive columns (role, wallet balances) from authenticated users.[m
+[32m+[m
+[32m+[m[32m## API Routes[m
+[32m+[m
+[32m+[m[32m| Method | Endpoint | Description |[m
+[32m+[m[32m|--------|----------|-------------|[m
+[32m+[m[32m| `GET` | `/api/auth/github` | Initiate GitHub OAuth flow |[m
+[32m+[m[32m| `GET` | `/api/auth/github/callback` | Handle OAuth callback |[m
+[32m+[m[32m| `PATCH` | `/api/profile` | Update user profile |[m
+[32m+[m[32m| `POST` | `/api/tasks` | Create a new task (business only) |[m
+[32m+[m[32m| `GET` | `/api/wallet` | Get wallet balance & transactions |[m
+[32m+[m[32m| `POST` | `/api/wallet/withdrawal` | Initiate UPI withdrawal (≥₹500) |[m
+[32m+[m
+[32m+[m[32m## Testing[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# Run all tests[m
+[32m+[m[32mnpm test[m
+[32m+[m
+[32m+[m[32m# Run tests in watch mode[m
+[32m+[m[32mnpx vitest[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mThe test suite covers:[m
+[32m+[m
+[32m+[m[32m- **Session token security** — HMAC signing/verification, tamper detection, expiry, production secret enforcement, legacy session gating[m
+[32m+[m[32m- **Withdrawal system** — Balance validation, insufficient funds, wallet not found, API endpoint auth/validation[m
+[32m+[m
+[32m+[m[32m## Scripts[m
+[32m+[m
+[32m+[m[32m| Command | Description |[m
+[32m+[m[32m|---------|-------------|[m
+[32m+[m[32m| `npm run dev` | Start development server |[m
+[32m+[m[32m| `npm run build` | Production build |[m
+[32m+[m[32m| `npm start` | Start production server |[m
+[32m+[m[32m| `npm run lint` | Run ESLint |[m
+[32m+[m[32m| `npm test` | Run Vitest test suite |[m
+[32m+[m[32m| `npm run seed` | Seed database with demo data |[m
+[32m+[m[32m| `npm run db:push` | Push migrations to Supabase |[m
+[32m+[m
+[32m+[m[32m## Deployment[m
+[32m+[m
+[32m+[m[32mThe application is designed for deployment on [Vercel](https://vercel.com/):[m
+[32m+[m
+[32m+[m[32m1. Connect your GitHub repository to Vercel[m
+[32m+[m[32m2. Set all required environment variables in the Vercel dashboard[m
+[32m+[m[32m3. Ensure `SESSION_SECRET` is set to a strong, unique value (the app refuses to start with the default in production)[m
+[32m+[m[32m4. Deploy[m
+[32m+[m
+[32m+[m[32m## Contributing[m
+[32m+[m
+[32m+[m[32mSee [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.[m
+[32m+[m
+[32m+[m[32m## Security[m
+[32m+[m
+[32m+[m[32mSee [SECURITY.md](SECURITY.md) for our security policy and how to report vulnerabilities.[m
+[32m+[m
+[32m+[m[32m## License[m
+[32m+[m
+[32m+[m[32mThis project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.[m
+\ No newline at end of file[m

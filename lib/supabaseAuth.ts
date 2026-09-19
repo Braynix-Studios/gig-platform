@@ -67,12 +67,19 @@ export async function getSession(): Promise<SessionPayload | null> {
   const { data: { session } } = await supabase.auth.getSession();
   const expiresAt = session?.expires_at ? session.expires_at * 1000 : Date.now() + MAX_AGE * 1000;
 
+  // BUG-001 FIX: Read verified role and profile from public.users rather than mutable metadata
+  const { data: profile } = await supabase
+    .from('users')
+    .select('role, github_id, username, company')
+    .eq('id', user.id)
+    .single();
+
   return {
     userId: user.id,
     email: user.email || '',
-    role: (user.user_metadata?.role as 'developer' | 'business') || 'developer',
-    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-    githubId: user.user_metadata?.github_id,
+    role: (profile?.role as 'developer' | 'business') || (user.user_metadata?.role as 'developer' | 'business') || 'developer',
+    name: profile?.username || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+    githubId: profile?.github_id || user.user_metadata?.github_id,
     expiresAt,
   };
 }
