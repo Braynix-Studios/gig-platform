@@ -438,7 +438,10 @@ export async function upsertUser(
     )
     .select()
     .maybeSingle();
-  if (error) return null;
+  if (error) {
+    console.error("[upsertUser] Supabase error:", error.message, error.details, error.hint);
+    return null;
+  }
   return data;
 }
 
