@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClientWithCookies } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
-import { getWalletByUserId, getWalletTransactions } from "@/lib/db-operations";
+import { getWalletByUser, getWalletTransactions } from "@/lib/db-operations";
 
 function formatINR(amount: number): string {
   const absAmount = Math.abs(amount);
@@ -31,7 +31,7 @@ export async function GET() {
     const userId = session.userId;
 
     // Get wallet
-    const wallet = await getWalletByUserId(userId);
+    const wallet = await getWalletByUser(userId);
     if (!wallet) {
       return NextResponse.json(
         { error: "Wallet not found" },
