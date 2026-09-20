@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import BizHeader from "@/components/dashboard/BizHeader";
@@ -19,7 +20,44 @@ const CHARCOAL = "#151b1d";
 const BORDER = "#e4e4e7";
 const MUTED = "#71717b";
 const GREEN = "#257b5a";
+const MINT = "#00c950";
 const CARD_SHADOW = "0 8px 24px rgba(37, 123, 90, 0.06)";
+
+const shareIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+  </svg>
+);
+
+const mapPinIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
+);
+
+const githubIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+  </svg>
+);
+
+const checkIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const xIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
 
 type BizTab = "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
 
@@ -166,6 +204,320 @@ interface ProfileState {
   avatar_url: string | null;
 }
 
+function EditBusinessModal({
+  isOpen,
+  onClose,
+  profileForm,
+  setProfileForm,
+  onSave,
+  saving,
+  error,
+  initials,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  profileForm: ProfileState;
+  setProfileForm: React.Dispatch<React.SetStateAction<ProfileState>>;
+  onSave: () => Promise<void>;
+  saving: boolean;
+  error: string | null;
+  initials: string;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
+        backdropFilter: "blur(4px)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "#ffffff",
+          borderRadius: 16,
+          width: "100%",
+          maxWidth: 580,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxShadow: "0 24px 48px rgba(0, 0, 0, 0.2)",
+          border: `1px solid ${BORDER}`,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Modal Header */}
+        <div
+          style={{
+            padding: "20px 24px",
+            borderBottom: `1px solid ${BORDER}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: CHARCOAL }}>
+              Edit Company Profile
+            </h2>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: MUTED }}>
+              Update company identity, mission, headquarters, and GitHub organization
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => !saving && onClose()}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: MUTED,
+              padding: 6,
+              borderRadius: 6,
+            }}
+            aria-label="Close modal"
+          >
+            {xIcon}
+          </button>
+        </div>
+
+        {/* Modal Form */}
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {error && (
+            <div style={{ padding: "10px 14px", backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: 8, fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+
+          {/* Circular Company Logo Preview & Input */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            {profileForm.avatar_url ? (
+              <img
+                src={profileForm.avatar_url}
+                alt="Logo preview"
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  border: `2px solid ${MINT}`,
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: "50%",
+                  backgroundColor: "#151b1d",
+                  border: `2px solid ${MINT}`,
+                  color: MINT,
+                  fontSize: 24,
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {initials}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+                Company Logo / Avatar URL
+              </label>
+              <input
+                type="text"
+                value={profileForm.avatar_url || ""}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, avatar_url: e.target.value }))}
+                placeholder="https://images.unsplash.com/... or logo image"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Company Name & GitHub Organization */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+                Company Name
+              </label>
+              <input
+                type="text"
+                value={profileForm.company || ""}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, company: e.target.value, displayName: e.target.value }))}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+                GitHub Organization
+              </label>
+              <input
+                type="text"
+                value={profileForm.githubHandle || ""}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, githubHandle: e.target.value }))}
+                placeholder="e.g. acme-corp"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Mission / Bio */}
+          <div>
+            <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+              Company Mission / Overview
+            </label>
+            <textarea
+              value={profileForm.bio || ""}
+              onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
+              rows={3}
+              placeholder="Describe your organization and the open source software you sponsor..."
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                border: `1px solid ${BORDER}`,
+                borderRadius: 6,
+                fontSize: 13,
+                resize: "vertical",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {/* Location & Admin Email */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+                Headquarters / Location
+              </label>
+              <input
+                type="text"
+                value={profileForm.location || ""}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, location: e.target.value }))}
+                placeholder="e.g. San Francisco, CA / Remote"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>
+                Admin Email (Read-only)
+              </label>
+              <input
+                type="text"
+                value={profileForm.displayEmail}
+                disabled
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  backgroundColor: "#f4f4f5",
+                  color: MUTED,
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          style={{
+            padding: "16px 24px",
+            borderTop: `1px solid ${BORDER}`,
+            backgroundColor: "#f9fafb",
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 10,
+            borderBottomLeftRadius: 16,
+            borderBottomRightRadius: 16,
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              height: 38,
+              padding: "0 18px",
+              backgroundColor: "#ffffff",
+              color: CHARCOAL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            style={{
+              height: 38,
+              padding: "0 22px",
+              backgroundColor: MINT,
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabContent({
   activeTab,
   data,
@@ -303,16 +655,430 @@ function TabContent({
         </section>
       );
 
-    case "profile":
-      return (
-        <section id="biz-profile" style={{ scrollMarginTop: 24 }}>
-          <SectionHeading
-            title="Company Profile & Enterprise Workspace"
-            sub="Maintain organizational identity, verify multi-sig escrow status, and oversee connected repositories"
-          />
+    case "profile": {
+      const [shareToast, setShareToast] = useState(false);
+      const cleanGithub = cleanGithubHandle(profileState.githubHandle);
+      const companyDisplayName = profileState.company || profileState.displayName || "Acme Enterprise Labs";
+      const companyInitials = companyDisplayName
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
 
+      const hasOrgGithub = Boolean(cleanGithub);
+      const hasOrgBio = Boolean(profileState.bio && profileState.bio.trim().length > 0);
+      const hasOrgLocation = Boolean(profileState.location && profileState.location.trim().length > 0);
+      const hasEscrowActive = true;
+      const completedCount = [hasOrgGithub, hasOrgBio, hasOrgLocation, hasEscrowActive].filter(Boolean).length;
+      const completenessPercentage = Math.max(25, Math.round((completedCount / 4) * 100));
+
+      const handleShareProfile = async () => {
+        try {
+          if (typeof window !== "undefined") {
+            await navigator.clipboard.writeText(window.location.href);
+            setShareToast(true);
+            setTimeout(() => setShareToast(false), 3000);
+          }
+        } catch {
+          setShareToast(true);
+          setTimeout(() => setShareToast(false), 3000);
+        }
+      };
+
+      const displayDisbursals: BizDisbursal[] = disbursals.length > 0 ? disbursals : [
+        { id: "dis-882", date: "2026-09-12", recipient: "Alex Rivers", taskTitle: "Fix stale redirect marker in hidden Activity", amount: "$1,500 USDC", status: "Settled", txHash: "0x8f2a...4b19" },
+        { id: "dis-879", date: "2026-09-10", recipient: "Elena Rostova", taskTitle: "Implement HMAC-SHA256 Session Gate", amount: "$2,500 USDC", status: "Settled", txHash: "0x4d19...3c22" },
+        { id: "dis-865", date: "2026-09-08", recipient: "Alex Rivers", taskTitle: "Turbopack Cache Invalidation Optimization", amount: "$1,200 USDC", status: "Settled", txHash: "0x3c7e...9a42" },
+      ];
+
+      return (
+        <section id="biz-profile" style={{ marginTop: 24, scrollMarginTop: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Top Status Bar */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 14px",
+                  borderRadius: 9999,
+                  backgroundColor: "rgba(0, 201, 80, 0.08)",
+                  border: "1px solid rgba(0, 201, 80, 0.25)",
+                  color: GREEN,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                BUSINESS TIER 1 · GIG VERIFIED
+              </span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 14px",
+                  borderRadius: 9999,
+                  backgroundColor: "rgba(0, 201, 80, 0.08)",
+                  border: "1px solid rgba(0, 201, 80, 0.25)",
+                  color: GREEN,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: MINT, display: "inline-block" }} />
+                MULTI-SIG ESCROW ACTIVE
+              </span>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={handleShareProfile}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  height: 36,
+                  padding: "0 16px",
+                  borderRadius: 6,
+                  backgroundColor: "#ffffff",
+                  border: `1px solid ${BORDER}`,
+                  color: CHARCOAL,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {shareIcon}
+                <span>Share profile</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Feedback alerts */}
+          {profileSuccess && (
+            <div style={{ padding: "12px 16px", backgroundColor: "rgba(0, 201, 80, 0.12)", border: "1px solid rgba(0, 201, 80, 0.25)", color: GREEN, borderRadius: 8, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+              {checkIcon} <span>{profileSuccess}</span>
+            </div>
+          )}
+          {profileError && (
+            <div style={{ padding: "12px 16px", backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: 8, fontSize: 13 }}>
+              {profileError}
+            </div>
+          )}
+
+          {/* Hero Card */}
           <div
-            className="biz-profile-grid"
+            className="biz-hero-card"
+            style={{
+              backgroundColor: "#ffffff",
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              boxShadow: CARD_SHADOW,
+              overflow: "hidden",
+              display: "flex",
+            }}
+          >
+            {/* Hero Left: Escrow Vault & Trust Rating */}
+            <div
+              className="biz-hero-left"
+              style={{
+                backgroundColor: "#09090b",
+                color: "#ffffff",
+                padding: "32px 28px",
+                width: 280,
+                minWidth: 260,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                boxSizing: "border-box",
+                flexShrink: 0,
+              }}
+            >
+              <div>
+                <span style={{ fontSize: 11, letterSpacing: "0.15em", fontWeight: 700, textTransform: "uppercase", color: "#a1a1aa" }}>
+                  ORGANIZATION TRUST RATING
+                </span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 14, marginBottom: 8 }}>
+                  <span style={{ fontSize: "3.5rem", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1, color: "#ffffff" }}>
+                    100%
+                  </span>
+                  <span
+                    style={{
+                      backgroundColor: "rgba(0, 201, 80, 0.15)",
+                      color: MINT,
+                      border: "1px solid rgba(0, 201, 80, 0.30)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: 9999,
+                      padding: "3px 10px",
+                    }}
+                  >
+                    TIER 1 SPONSOR
+                  </span>
+                </div>
+              </div>
+              <div style={{ marginTop: 24 }}>
+                <p style={{ margin: "0 0 8px", fontSize: 11, color: "#a1a1aa" }}>
+                  100% Smart Contract Collateralized
+                </p>
+                <div style={{ height: 8, backgroundColor: "rgba(255, 255, 255, 0.12)", borderRadius: 9999, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: "100%", backgroundColor: MINT, borderRadius: 9999 }} />
+                </div>
+                <p style={{ margin: "8px 0 0", fontSize: 10, color: "#71717b" }}>
+                  Multi-Sig Escrow Active · Real-time verification
+                </p>
+              </div>
+            </div>
+
+            {/* Hero Right: Organization Details */}
+            <div
+              className="biz-hero-right"
+              style={{
+                padding: "32px 28px",
+                flex: 1,
+                minWidth: 320,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: 20,
+              }}
+            >
+              <div className="biz-hero-row" style={{ display: "flex", alignItems: "flex-start", gap: 24 }}>
+                {/* CIRCULAR PROFILE PICTURE (140x140) */}
+                {profileState.avatar_url ? (
+                  <img
+                    src={profileState.avatar_url}
+                    alt={companyDisplayName}
+                    style={{
+                      width: 140,
+                      height: 140,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "3px solid #ffffff",
+                      boxShadow: "0 6px 20px rgba(0, 0, 0, 0.10)",
+                      flexShrink: 0,
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 140,
+                      height: 140,
+                      borderRadius: "50%",
+                      backgroundColor: "#151b1d",
+                      border: "3px solid #ffffff",
+                      color: MINT,
+                      fontSize: 46,
+                      fontWeight: 800,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 6px 20px rgba(0, 0, 0, 0.10)",
+                      flexShrink: 0,
+                      letterSpacing: "-0.04em",
+                    }}
+                  >
+                    {companyInitials}
+                  </div>
+                )}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontSize: "2rem",
+                      fontWeight: 800,
+                      color: CHARCOAL,
+                      letterSpacing: "-0.03em",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {companyDisplayName}
+                  </h1>
+
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12, marginTop: 6, fontSize: 13, color: MUTED }}>
+                    <span style={{ fontFamily: "monospace", color: CHARCOAL, fontWeight: 600 }}>
+                      {profileState.displayEmail}
+                    </span>
+                    {cleanGithub && (
+                      <a
+                        href={`https://github.com/${cleanGithub}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, color: GREEN, textDecoration: "none", fontWeight: 600 }}
+                      >
+                        {githubIcon}
+                        <span>github.com/{cleanGithub}</span>
+                      </a>
+                    )}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {mapPinIcon}
+                      <span>{profileState.location || "San Francisco, CA"}</span>
+                    </span>
+                  </div>
+
+                  <p
+                    style={{
+                      margin: "12px 0 14px",
+                      fontSize: 14,
+                      color: "#52525b",
+                      lineHeight: 1.55,
+                      maxWidth: 640,
+                    }}
+                  >
+                    {profileState.bio || "Building next-generation open source distributed infrastructure and high-assurance web platforms with cryptographically verified engineering talent."}
+                  </p>
+
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "5px 14px",
+                      borderRadius: 9999,
+                      backgroundColor: "rgba(0, 201, 80, 0.10)",
+                      border: "1px solid rgba(0, 201, 80, 0.25)",
+                      color: GREEN,
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: MINT }} />
+                    <span>Active Enterprise Sponsor · Multi-Sig Escrow Active</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hero Action Buttons */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderTop: "1px solid #f4f4f5", paddingTop: 18 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileForm({ ...profileState });
+                    setIsEditingProfile(true);
+                  }}
+                  style={{
+                    height: 40,
+                    padding: "0 22px",
+                    backgroundColor: MINT,
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 8px rgba(0, 201, 80, 0.25)",
+                  }}
+                >
+                  Edit company profile
+                </button>
+
+                {cleanGithub ? (
+                  <a
+                    href={`https://github.com/${cleanGithub}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      height: 40,
+                      padding: "0 18px",
+                      backgroundColor: "#ffffff",
+                      color: CHARCOAL,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 8,
+                      fontWeight: 600,
+                      fontSize: 13,
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span>View GitHub organization</span>
+                    <span style={{ fontSize: 14 }}>↗</span>
+                  </a>
+                ) : (
+                  <a
+                    href="/api/auth/github"
+                    style={{
+                      height: 40,
+                      padding: "0 18px",
+                      backgroundColor: CHARCOAL,
+                      color: "#ffffff",
+                      borderRadius: 8,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    {githubIcon}
+                    <span>Connect GitHub organization</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Three Stat Cards Grid */}
+          <div
+            className="biz-stats-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            {/* Card 1: Active Bounties */}
+            <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: "20px 24px", boxShadow: CARD_SHADOW, display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                ACTIVE BOUNTIES
+              </span>
+              <span style={{ fontSize: "2.25rem", fontWeight: 800, color: CHARCOAL, lineHeight: 1.1 }}>
+                {backlogTasks.length}
+              </span>
+              <span style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                4 in progress, 4 accepting bids
+              </span>
+            </div>
+
+            {/* Card 2: Connected Repositories */}
+            <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: "20px 24px", boxShadow: CARD_SHADOW, display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                CONNECTED REPOSITORIES
+              </span>
+              <span style={{ fontSize: "2.25rem", fontWeight: 800, color: CHARCOAL, lineHeight: 1.1 }}>
+                {cleanGithub ? "4" : "0"}
+              </span>
+              <span style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                {cleanGithub ? "GitHub organization verified" : "Connect GitHub organization"}
+              </span>
+            </div>
+
+            {/* Card 3: Escrow Vault Secured */}
+            <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: "20px 24px", boxShadow: CARD_SHADOW, display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                ESCROW VAULT SECURED
+              </span>
+              <span style={{ fontSize: "2.25rem", fontWeight: 800, color: GREEN, lineHeight: 1.1 }}>
+                $32,500 USDC
+              </span>
+              <span style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                100% smart contract collateralized
+              </span>
+            </div>
+          </div>
+
+          {/* Two-Column Lower Section */}
+          <div
+            className="biz-lower-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "360px 1fr",
@@ -320,646 +1086,286 @@ function TabContent({
               alignItems: "start",
             }}
           >
-            {/* Left Column: Organization Summary & Identity Card */}
-            <div
-              style={{
-                backgroundColor: "#ffffff",
-                border: `1px solid ${BORDER}`,
-                borderRadius: 12,
-                boxShadow: CARD_SHADOW,
-                padding: 24,
-                display: "flex",
-                flexDirection: "column",
-                gap: 20,
-              }}
-            >
-              {/* Company Avatar & Name Header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                {profileState.avatar_url ? (
-                  <img
-                    src={profileState.avatar_url}
-                    alt={profileState.company || profileState.displayName}
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 12,
-                      objectFit: "cover",
-                      border: `1.5px solid ${BORDER}`,
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 12,
-                      backgroundColor: "#151b1d",
-                      border: "1.5px solid rgba(0, 201, 80, 0.3)",
-                      color: "#00c950",
-                      fontSize: 22,
-                      fontWeight: 800,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      letterSpacing: "-0.04em",
-                    }}
-                  >
-                    {(profileState.company || profileState.displayName)
-                      .split(" ")
-                      .map((w) => w[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </div>
-                )}
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontSize: "1.25rem",
-                      fontWeight: 800,
-                      color: CHARCOAL,
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {isEditingProfile ? profileForm.company || profileState.company : profileState.company || profileState.displayName}
-                  </h2>
-                  <p
-                    style={{
-                      margin: "4px 0 0",
-                      fontSize: 13,
-                      color: MUTED,
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    {profileState.displayEmail}
-                  </p>
-                </div>
-              </div>
-
-              {/* Enterprise Sponsor Tier Badge */}
-              <div
-                style={{
-                  backgroundColor: "rgba(0, 201, 80, 0.08)",
-                  border: "1px solid rgba(0, 201, 80, 0.22)",
-                  color: GREEN,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  padding: "8px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-              >
-                <span>★</span>
-                <span>Tier 1 Enterprise Sponsor · Multi-Sig Escrow Active</span>
-              </div>
-
-              {/* Status alerts */}
-              {profileSuccess && (
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    backgroundColor: "rgba(0, 201, 80, 0.12)",
-                    border: "1px solid rgba(0, 201, 80, 0.25)",
-                    color: GREEN,
-                    borderRadius: 8,
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  ✓ {profileSuccess}
-                </div>
-              )}
-              {profileError && (
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    backgroundColor: "#fef2f2",
-                    border: "1px solid #fecaca",
-                    color: "#dc2626",
-                    borderRadius: 8,
-                    fontSize: 13,
-                  }}
-                >
-                  {profileError}
-                </div>
-              )}
-
-              {/* Edit Toggle / Save Buttons */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                {!isEditingProfile ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileForm({ ...profileState });
-                      setIsEditingProfile(true);
-                    }}
-                    style={{
-                      height: 38,
-                      padding: "0 18px",
-                      backgroundColor: "#00c950",
-                      color: "#f0fdf4",
-                      border: "none",
-                      borderRadius: 6,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    Edit Company Profile
-                  </button>
-                ) : (
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingProfile(false)}
-                      disabled={savingProfile}
-                      style={{
-                        height: 38,
-                        padding: "0 16px",
-                        backgroundColor: "#ffffff",
-                        color: CHARCOAL,
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveProfile}
-                      disabled={savingProfile}
-                      style={{
-                        height: 38,
-                        padding: "0 18px",
-                        backgroundColor: "#00c950",
-                        color: "#f0fdf4",
-                        border: "none",
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        cursor: savingProfile ? "not-allowed" : "pointer",
-                        opacity: savingProfile ? 0.7 : 1,
-                      }}
-                    >
-                      {savingProfile ? "Saving..." : "Save Changes"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* View Mode Content */}
-              {!isEditingProfile ? (
-                <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-                  {/* Mission / Bio */}
-                  <div>
-                    <span style={{ color: MUTED, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                      Company Mission / Bio
-                    </span>
-                    <p style={{ margin: "6px 0 0", fontSize: 13, color: CHARCOAL, lineHeight: 1.5 }}>
-                      {profileState.bio || "No mission description provided yet. Click 'Edit Company Profile' to add your organization's mission."}
-                    </p>
-                  </div>
-
-                  {/* Metadata key-value rows */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: MUTED }}>Organization</span>
-                      <span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.company || profileState.displayName}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: MUTED }}>Location</span>
-                      <span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.location || "San Francisco, CA"}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: MUTED }}>Admin Email</span>
-                      <span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.displayEmail}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: MUTED }}>Escrow Collateral</span>
-                      <span style={{ fontWeight: 700, color: GREEN }}>$32,500 USDC</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span style={{ color: MUTED }}>Partner Status</span>
-                      <span style={{ fontWeight: 600, color: CHARCOAL }}>Enterprise Partner since 2024</span>
-                    </div>
-                  </div>
-
-                  {/* GitHub Connected Badge */}
-                  <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
-                    <span style={{ color: MUTED, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                      GitHub Organization
-                    </span>
-                    <div style={{ marginTop: 8 }}>
-                      {cleanGithubHandle(profileState.githubHandle) ? (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-                          <a
-                            href={`https://github.com/${cleanGithubHandle(profileState.githubHandle)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 8,
-                              padding: "8px 14px",
-                              backgroundColor: "rgba(0, 201, 80, 0.08)",
-                              color: GREEN,
-                              fontWeight: 600,
-                              fontSize: 13,
-                              border: "1px solid rgba(0, 201, 80, 0.20)",
-                              borderRadius: 6,
-                              textDecoration: "none",
-                            }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
-                            <span>@{cleanGithubHandle(profileState.githubHandle)}</span>
-                          </a>
-                          <span style={{ fontSize: 11, color: MUTED }}>Verified Organization</span>
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            backgroundColor: "#f9fafb",
-                            border: `1px dashed ${BORDER}`,
-                            borderRadius: 8,
-                            padding: 16,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 10,
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: "#f59e0b" }} />
-                            <span style={{ fontSize: 13, fontWeight: 700, color: CHARCOAL }}>GitHub Not Connected</span>
-                          </div>
-                          <p style={{ margin: 0, fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-                            Connect your organization&apos;s GitHub account to import repositories directly into the Issue Pool and verify contributor pull requests.
-                          </p>
-                          <div>
-                            <a
-                              href="/api/auth/github"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 8,
-                                padding: "8px 16px",
-                                backgroundColor: CHARCOAL,
-                                color: "#ffffff",
-                                fontWeight: 700,
-                                fontSize: 13,
-                                borderRadius: 6,
-                                textDecoration: "none",
-                              }}
-                            >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
-                              Connect GitHub Organization
-                            </a>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Edit Mode Form */
-                <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>
-                      Company / Organization Name
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.company || ""}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, company: e.target.value, displayName: e.target.value }))}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>
-                      Company Mission / Bio
-                    </label>
-                    <textarea
-                      value={profileForm.bio || ""}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, bio: e.target.value }))}
-                      rows={3}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff",
-                        resize: "vertical",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>
-                      Location
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.location || ""}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, location: e.target.value }))}
-                      placeholder="e.g. San Francisco, CA"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>
-                      Company Avatar / Logo URL
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.avatar_url || ""}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, avatar_url: e.target.value }))}
-                      placeholder="https://..."
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff",
-                      }}
-                    />
-                    {profileForm.avatar_url && (
-                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 11, color: MUTED }}>Preview:</span>
-                        <img
-                          src={profileForm.avatar_url}
-                          alt="Preview"
-                          style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", border: `1px solid ${BORDER}` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>
-                      GitHub Organization Handle
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.githubHandle || ""}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, githubHandle: e.target.value }))}
-                      placeholder="e.g. acme-corp"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff",
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column: Mission Scope, Bounties, and Talent */}
+            {/* Left Column: Scope & Completeness */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {/* Card 1: Enterprise Engineering Scope */}
-              <div
-                style={{
-                  backgroundColor: "#ffffff",
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 12,
-                  boxShadow: CARD_SHADOW,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "16px 20px",
-                    borderBottom: `1px solid ${BORDER}`,
-                    backgroundColor: "rgba(0,0,0,0.02)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: CHARCOAL }}>
-                    Enterprise Engineering Scope & Escrow Protocol
+              <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: CHARCOAL }}>
+                    Enterprise engineering scope
                   </h3>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: GREEN,
-                      backgroundColor: "rgba(0, 201, 80, 0.08)",
-                      padding: "3px 10px",
-                      borderRadius: 9999,
-                    }}
-                  >
-                    100% COLLATERALIZED
-                  </span>
+                  <span style={{ fontSize: 11, color: GREEN, fontWeight: 700 }}>100% ESCROW</span>
                 </div>
-                <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.6 }}>
-                    All tasks funded by {profileState.company || profileState.displayName} execute under deterministic smart-contract escrow.
-                    Acceptance criteria and proof-of-work benchmarks are verified via automated CI pipelines before funds release to vetted contributors.
+                <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.55 }}>
+                    Deterministic smart contract collateralization guarantees automated payouts once PR acceptance tests pass.
                   </p>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 12,
-                      borderTop: `1px solid ${BORDER}`,
-                      paddingTop: 16,
-                    }}
-                  >
-                    <div style={{ backgroundColor: "#f9fafb", padding: "12px 14px", borderRadius: 8, border: "1px solid #f0f0f2" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: MUTED }}>Active Bounties</span>
-                      <p style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800, color: GREEN }}>{backlogTasks.length}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: CHARCOAL }}>Next.js 16 Runtime</span>
+                      <span style={{ color: MUTED }}>Active Focus</span>
                     </div>
-                    <div style={{ backgroundColor: "#f9fafb", padding: "12px 14px", borderRadius: 8, border: "1px solid #f0f0f2" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: MUTED }}>Matched Talent</span>
-                      <p style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800, color: CHARCOAL }}>{talentPool.length}</p>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: CHARCOAL }}>ZK-SNARKs Protocol</span>
+                      <span style={{ color: MUTED }}>Verification</span>
                     </div>
-                    <div style={{ backgroundColor: "#f9fafb", padding: "12px 14px", borderRadius: 8, border: "1px solid #f0f0f2" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: MUTED }}>Merge Velocity</span>
-                      <p style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800, color: CHARCOAL }}>4.2 hrs</p>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: CHARCOAL }}>Distributed Storage Mesh</span>
+                      <span style={{ color: MUTED }}>Production</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Card 2: Connected Repositories & Active Bounties */}
-              <div
-                style={{
-                  backgroundColor: "#ffffff",
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 12,
-                  boxShadow: CARD_SHADOW,
-                  overflow: "hidden",
-                }}
-              >
-                <div
+              {/* Card 2: Organization Completeness */}
+              <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, padding: "20px 22px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: CHARCOAL }}>
+                    Organization completeness
+                  </h3>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: GREEN, backgroundColor: "rgba(0, 201, 80, 0.10)", padding: "2px 8px", borderRadius: 9999 }}>
+                    {completenessPercentage}%
+                  </span>
+                </div>
+                <div style={{ height: 8, backgroundColor: "#f4f4f5", borderRadius: 9999, overflow: "hidden", marginBottom: 16 }}>
+                  <div style={{ height: "100%", width: `${completenessPercentage}%`, backgroundColor: MINT, borderRadius: 9999 }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: hasOrgGithub ? CHARCOAL : MUTED }}>
+                    <span style={{ color: hasOrgGithub ? MINT : "#d1d5db", fontWeight: 700 }}>{hasOrgGithub ? "✓" : "○"}</span>
+                    <span>GitHub organization connected</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: hasOrgBio ? CHARCOAL : MUTED }}>
+                    <span style={{ color: hasOrgBio ? MINT : "#d1d5db", fontWeight: 700 }}>{hasOrgBio ? "✓" : "○"}</span>
+                    <span>Company mission & details added</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: hasOrgLocation ? CHARCOAL : MUTED }}>
+                    <span style={{ color: hasOrgLocation ? MINT : "#d1d5db", fontWeight: 700 }}>{hasOrgLocation ? "✓" : "○"}</span>
+                    <span>Headquarters / Location specified</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: hasEscrowActive ? CHARCOAL : MUTED }}>
+                    <span style={{ color: hasEscrowActive ? MINT : "#d1d5db", fontWeight: 700 }}>{hasEscrowActive ? "✓" : "○"}</span>
+                    <span>Multi-sig escrow vault funded</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileForm({ ...profileState });
+                    setIsEditingProfile(true);
+                  }}
                   style={{
-                    padding: "16px 20px",
-                    borderBottom: `1px solid ${BORDER}`,
-                    backgroundColor: "rgba(0,0,0,0.02)",
+                    marginTop: 16,
+                    width: "100%",
+                    height: 36,
+                    backgroundColor: "#ffffff",
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 8,
+                    color: CHARCOAL,
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: "pointer",
                     display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
                   }}
                 >
-                  <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: CHARCOAL }}>
-                    Connected Repositories & Engineering Backlog
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={onOpenImportModal}
-                    style={{
-                      padding: "4px 12px",
-                      borderRadius: 6,
-                      backgroundColor: GREEN,
-                      color: "#ffffff",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    + Import Repo
-                  </button>
-                </div>
+                  <span>Complete profile</span>
+                  <span>↗</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right Column: Bounties & Escrow Timeline */}
+            <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
+              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  {backlogTasks.length === 0 ? (
-                    <p style={{ padding: 20, margin: 0, fontSize: 13, color: MUTED }}>No active bounties or connected repositories.</p>
-                  ) : (
-                    backlogTasks.map((t, idx) => (
-                      <div
-                        key={t.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 16,
-                          padding: "14px 20px",
-                          borderTop: idx === 0 ? "none" : `1px solid ${BORDER}`,
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ margin: 0, fontWeight: 600, color: CHARCOAL, fontSize: 14 }}>{t.title}</p>
-                          <p style={{ margin: "2px 0 0", fontSize: 12, color: MUTED, fontFamily: "monospace" }}>
-                            {t.repo} · {t.applicantsCount} applicant{t.applicantsCount === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>{t.budget}</span>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              backgroundColor: t.status === "Active" ? "rgba(0, 201, 80, 0.10)" : "#f4f4f5",
-                              color: t.status === "Active" ? GREEN : CHARCOAL,
-                              border: `1px solid ${BORDER}`,
-                            }}
-                          >
-                            {t.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: CHARCOAL }}>
+                    Bounties & escrow timeline
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: MUTED }}>
+                    Recent task assignments, milestone completions, and settled disbursals
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={onOpenImportModal}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    backgroundColor: GREEN,
+                    color: "#ffffff",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  + Import Repo
+                </button>
               </div>
 
-              {/* Card 3: Vetted Engineering Talent Pool */}
-              <div
-                style={{
-                  backgroundColor: "#ffffff",
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 12,
-                  boxShadow: CARD_SHADOW,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "16px 20px",
-                    borderBottom: `1px solid ${BORDER}`,
-                    backgroundColor: "rgba(0,0,0,0.02)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: CHARCOAL }}>
-                    Vetted Talent Network
-                  </h3>
-                  <span style={{ fontSize: 12, color: MUTED }}>{talentPool.length} Certified Contributors</span>
-                </div>
-                <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                  {talentPool.slice(0, 4).map((dev) => (
-                    <div
-                      key={dev.id}
-                      style={{
-                        padding: 12,
-                        backgroundColor: "#f9fafb",
-                        border: "1px solid #f0f0f2",
-                        borderRadius: 8,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <p style={{ margin: 0, fontWeight: 700, color: CHARCOAL, fontSize: 13 }}>{dev.name}</p>
-                          <p style={{ margin: "2px 0 0", fontSize: 11, color: MUTED, fontFamily: "monospace" }}>{dev.githubHandle}</p>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, backgroundColor: "rgba(0, 201, 80, 0.08)", padding: "2px 6px", borderRadius: 4 }}>
-                          ★ {dev.reputation}
+              <div>
+                {displayDisbursals.map((dis, idx) => (
+                  <div
+                    key={dis.id}
+                    style={{
+                      padding: "16px 20px",
+                      borderTop: idx === 0 ? "none" : `1px solid ${BORDER}`,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontWeight: 700, color: CHARCOAL, fontSize: 14 }}>
+                          {dis.taskTitle}
+                        </p>
+                        <p style={{ margin: "2px 0 0", fontSize: 12, color: MUTED }}>
+                          Contributor: <span style={{ fontWeight: 600, color: CHARCOAL }}>{dis.recipient}</span> · Settled {dis.date}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: GREEN }}>
+                          {dis.amount}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            backgroundColor: "rgba(0, 201, 80, 0.10)",
+                            color: GREEN,
+                          }}
+                        >
+                          Settled
                         </span>
                       </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {dev.specialties.slice(0, 2).map((s) => (
-                          <span key={s} style={{ fontSize: 10, backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, padding: "1px 6px", borderRadius: 4, color: MUTED }}>
-                            {s}
-                          </span>
-                        ))}
-                      </div>
                     </div>
-                  ))}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: MUTED }}>
+                      <span style={{ fontFamily: "monospace" }}>Tx: {dis.txHash}</span>
+                      <span style={{ color: GREEN, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        {checkIcon} Smart contract verified
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bottom Bounty Lifecycle */}
+              <div style={{ padding: "16px 20px", backgroundColor: "#fafafa", borderTop: `1px solid ${BORDER}` }}>
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: "0.1em", textTransform: "uppercase", marginRight: 4 }}>
+                    Bounty Lifecycle:
+                  </span>
+                  <span style={{ padding: "4px 10px", borderRadius: 6, backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 600, color: CHARCOAL }}>
+                    Task spec
+                  </span>
+                  <span style={{ color: MUTED, fontSize: 12 }}>→</span>
+                  <span style={{ padding: "4px 10px", borderRadius: 6, backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 600, color: CHARCOAL }}>
+                    Fund escrow
+                  </span>
+                  <span style={{ color: MUTED, fontSize: 12 }}>→</span>
+                  <span style={{ padding: "4px 10px", borderRadius: 6, backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 600, color: CHARCOAL }}>
+                    Review PR
+                  </span>
+                  <span style={{ color: MUTED, fontSize: 12 }}>→</span>
+                  <span style={{ padding: "4px 12px", borderRadius: 6, backgroundColor: MINT, color: "#ffffff", fontSize: 11, fontWeight: 700 }}>
+                    Automated payout
+                  </span>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Bottom Call-to-Action Card */}
+          <div
+            style={{
+              backgroundColor: "#09090b",
+              borderTop: `3px solid ${MINT}`,
+              borderRadius: 12,
+              padding: "24px 28px",
+              color: "#ffffff",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 16,
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "#ffffff" }}>
+                Scale engineering output with verified talent
+              </h3>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#a1a1aa" }}>
+                Deterministic escrow contracts, automated test validation, and cryptographically verified contributors.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/business?tab=issue-pool"
+              style={{
+                padding: "10px 20px",
+                backgroundColor: "transparent",
+                color: "#ffffff",
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+                borderRadius: 8,
+                fontWeight: 700,
+                fontSize: 13,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span>Explore issue pool</span>
+              <span>→</span>
+            </Link>
+          </div>
+
+          {/* Edit Company Profile Modal */}
+          <EditBusinessModal
+            isOpen={isEditingProfile}
+            onClose={() => setIsEditingProfile(false)}
+            profileForm={profileForm}
+            setProfileForm={setProfileForm}
+            onSave={handleSaveProfile}
+            saving={savingProfile}
+            error={profileError}
+            initials={companyInitials}
+          />
+
+          {/* Toast Notification */}
+          {shareToast && (
+            <div
+              style={{
+                position: "fixed",
+                bottom: 24,
+                right: 24,
+                zIndex: 9999,
+                backgroundColor: "#09090b",
+                color: "#ffffff",
+                padding: "12px 20px",
+                borderRadius: 8,
+                boxShadow: "0 8px 24px rgba(0, 0, 0, 0.25)",
+                fontSize: 13,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                border: `1px solid ${MINT}`,
+              }}
+            >
+              <span style={{ color: MINT }}>✓</span> Profile link copied to clipboard!
+            </div>
+          )}
         </section>
       );
+    }
   }
 }
 
@@ -1034,15 +1440,22 @@ export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews 
           .biz-escrow-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .biz-profile-grid { grid-template-columns: minmax(0, 1fr) !important; }
         }
+        @media (max-width: 900px) {
+          .biz-hero-card { flex-direction: column !important; }
+          .biz-hero-left { width: 100% !important; min-width: 100% !important; }
+          .biz-lower-grid { grid-template-columns: minmax(0, 1fr) !important; }
+        }
         @media (max-width: 640px) {
-          .biz-page-wrap { padding: 24px 16px 64px !important; }
+          .biz-page-wrap { padding: 20px 16px 64px !important; }
           .biz-metrics-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .biz-stats-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .biz-hero-row { flex-direction: column !important; align-items: center !important; text-align: center !important; }
           .biz-talent-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .biz-profile-grid { grid-template-columns: minmax(0, 1fr) !important; }
         }
       `}</style>
       <div className="biz-page-wrap" style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 36px 80px" }}>
-        {activeTab === "issue-pool" ? null : (
+        {activeTab === "issue-pool" || activeTab === "profile" ? null : (
           <BizHeader
             displayName={profileState.company || profileState.displayName}
             displayEmail={profileState.displayEmail}
