@@ -757,13 +757,15 @@ export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolPr
                 Sync GitHub Repo
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setCreateModalOpen(true)}
-              style={buttonLike(MINT, MINT_FG)}
-            >
-              + Post New Issue
-            </button>
+            {role === "business" && (
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(true)}
+                style={buttonLike(MINT, MINT_FG)}
+              >
+                + Post New Issue
+              </button>
+            )}
           </div>
         </div>
 

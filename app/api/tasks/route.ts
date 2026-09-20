@@ -15,6 +15,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
+    const dbClient = supabaseAdmin ?? supabase;
+    const { data: user } = await dbClient
+      .from("users")
+      .select("role")
+      .eq("id", session.userId)
+      .maybeSingle();
+
+    if (!user || user.role !== "business") {
+      return NextResponse.json(
+        { error: "Only business sponsors are authorized to raise or post new issues." },
+        { status: 403 },
+      );
+    }
+
     const body = await request.json();
     const {
       repository_id,
@@ -102,7 +116,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const dbClient = supabaseAdmin ?? supabase;
     const { data: task, error } = await dbClient
       .from("tasks")
       .insert({
