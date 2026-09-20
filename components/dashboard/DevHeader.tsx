@@ -7,6 +7,7 @@ import { getSavedTasks } from "@/lib/saved-tasks";
 
 const BORDER = "#e4e4e7";
 const CHARCOAL = "#151b1d";
+const MUTED = "#71717b";
 const MINT = "#00c950";
 const MINT_SOFT = "rgba(0, 201, 80, 0.10)";
 const MINT_BDR = "rgba(0, 201, 80, 0.20)";
