@@ -84,13 +84,11 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
 
   const workItems = isBusiness
     ? [
-        { label: "Tasks Backlog", tab: "tasks-backlog", icon: tasksIcon, count: mergedStats.counts?.["Tasks Backlog"] ?? "8" },
         { label: "Issue Pool", tab: "issue-pool", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "0" },
         { label: "Talent Pool", tab: "talent-pool", icon: talentIcon, count: mergedStats.counts?.["Talent Pool"] ?? "42" },
         { label: "Workspace", tab: "workspace", icon: overviewIcon },
       ]
     : [
-        { label: "Tasks", tab: "tasks", icon: tasksIcon, count: mergedStats.counts?.["Tasks"] ?? "2" },
         { label: "Issue Pool", tab: "issues", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "0" },
         { label: "Verified PRs", tab: "prs", icon: prsIcon, count: mergedStats.counts?.["Verified PRs"] ?? "24" },
       ];

@@ -1736,7 +1736,7 @@ export default function DeveloperDashboard({ data = FALLBACK, issuePool }: DevDa
         }
       `}</style>
       <div className="dev-page-wrap" style={{ maxWidth: 1120, margin: "0 auto", padding: "32px 36px 80px" }}>
-        {activeTab === "issues" || activeTab === "profile" ? null : (
+        {activeTab === "profile" ? null : (
           <DevHeader
             displayName={profileState.username || mergedData.displayName}
             handle={profileState.handle || mergedData.handle}

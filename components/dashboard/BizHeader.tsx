@@ -181,6 +181,26 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           )}
         </Link>
         <Link
+          href="/dashboard/business?tab=issue-pool"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 18px",
+            borderRadius: 6,
+            backgroundColor: isActive(activeTab, "issue-pool") ? MINT : "transparent",
+            color: isActive(activeTab, "issue-pool") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "issue-pool") ? MINT : "rgba(255,255,255,0.25)"}`,
+            fontWeight: 600,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Issue Pool
+        </Link>
+        <Link
           href="/dashboard/business?tab=profile"
           style={{
             display: "inline-flex",

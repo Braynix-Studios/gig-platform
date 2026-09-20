@@ -143,13 +143,11 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
 
   const workItems = isBusiness
     ? [
-        { label: "Tasks Backlog", tab: "tasks-backlog", icon: tasksIcon, count: (s.tasksCount !== undefined ? String(s.tasksCount) : undefined) ?? s.counts?.["Tasks Backlog"] ?? "8" },
         { label: "Issue Pool", tab: "issue-pool", icon: layersIcon, count: s.counts?.["Issue Pool"] ?? "0" },
         { label: "Talent Pool", tab: "talent-pool", icon: talentIcon, count: s.counts?.["Talent Pool"] ?? "42" },
         { label: "Workspace", tab: "workspace", icon: overviewIcon },
       ]
     : [
-        { label: "Tasks", tab: "tasks", icon: tasksIcon, count: (s.tasksCount !== undefined ? String(s.tasksCount) : undefined) ?? s.counts?.["Tasks"] ?? "2" },
         { label: "Issue Pool", tab: "issues", icon: layersIcon, count: s.counts?.["Issue Pool"] ?? "0" },
         { label: "Verified PRs", tab: "prs", icon: prsIcon, count: (s.prsCount !== undefined ? String(s.prsCount) : undefined) ?? s.counts?.["Verified PRs"] ?? "24" },
       ];
@@ -251,7 +249,7 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
             {s.walletSubtext && <span className="block mt-1" style={{ color: "#71717b", fontSize: 11, lineHeight: 1.3 }}>{s.walletSubtext}</span>}
           </Link>
         )}
-        <Link href={`${base}?tab=${isBusiness ? "tasks-backlog" : "tasks"}`} className="mt-2 w-full flex items-center justify-center gap-2 transition-opacity hover:opacity-90" style={{ height: 44, backgroundColor: "#00c950", color: "#f0fdf4", fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", borderRadius: 4 }}>
+        <Link href={`${base}?tab=${isBusiness ? "tasks-backlog" : "issues"}`} className="mt-2 w-full flex items-center justify-center gap-2 transition-opacity hover:opacity-90" style={{ height: 44, backgroundColor: "#00c950", color: "#f0fdf4", fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", borderRadius: 4 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <span>{isBusiness ? "POST TASK" : "CLAIM ISSUE"}</span>
         </Link>
