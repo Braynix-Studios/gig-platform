@@ -1467,7 +1467,7 @@ export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews 
         }
       `}</style>
       <div className="biz-page-wrap" style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 36px 80px" }}>
-        {activeTab === "issue-pool" || activeTab === "profile" ? null : (
+        {activeTab === "profile" ? null : (
           <BizHeader
             displayName={profileState.company || profileState.displayName}
             displayEmail={profileState.displayEmail}
