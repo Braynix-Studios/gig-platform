@@ -16,6 +16,7 @@ interface Repository {
   owner: string;
   url: string;
   opted_in: boolean;
+  description?: string | null;
 }
 
 interface GitHubIssue {
@@ -27,6 +28,10 @@ interface GitHubIssue {
   state: string;
   labels: Array<{ name: string; color: string }>;
   created_at: string;
+  user?: {
+    login: string;
+    avatar_url: string;
+  } | null;
 }
 
 interface GitHubImportModalProps {
@@ -44,6 +49,7 @@ export default function GitHubImportModal({
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<GitHubIssue | null>(null);
+  const [hasConnectedGithub, setHasConnectedGithub] = useState<boolean | null>(null);
 
   // Repository connect form
   const [showAddRepo, setShowAddRepo] = useState(false);
@@ -76,7 +82,8 @@ export default function GitHubImportModal({
       const json = await res.json();
       if (res.ok && json.repositories) {
         setRepositories(json.repositories);
-        if (json.repositories.length > 0 && !selectedRepoId) {
+        setHasConnectedGithub(Boolean(json.hasConnectedGithub));
+        if (json.repositories.length > 0) {
           setSelectedRepoId(json.repositories[0].id);
           loadGitHubIssues(json.repositories[0]);
         }
@@ -119,7 +126,7 @@ export default function GitHubImportModal({
 
   const handleConnectRepo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRepoOwner || !newRepoName || !newRepoUrl) return;
+    if (!newRepoOwner || !newRepoName) return;
     setSubmitting(true);
     setStatusMsg(null);
     try {
@@ -129,7 +136,7 @@ export default function GitHubImportModal({
         body: JSON.stringify({
           owner: newRepoOwner.trim(),
           name: newRepoName.trim(),
-          url: newRepoUrl.trim(),
+          url: newRepoUrl.trim() || `https://github.com/${newRepoOwner.trim()}/${newRepoName.trim()}`,
         }),
       });
       const json = await res.json();
@@ -237,7 +244,7 @@ export default function GitHubImportModal({
               Import GitHub Issues to Pool
             </h3>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: MUTED }}>
-              Select an open repository issue and assign GIG Coins bounty or mark as Open Source.
+              Directly select open issues from your connected GitHub repositories.
             </p>
           </div>
           <button
@@ -266,6 +273,45 @@ export default function GitHubImportModal({
             </div>
           )}
 
+          {/* GitHub Connection Notice */}
+          {hasConnectedGithub === false && (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 10,
+                backgroundColor: "#fffbeb",
+                border: "1px solid #fde68a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: 13, color: "#92400e" }}>
+                  Connect your GitHub account
+                </strong>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#b45309" }}>
+                  Link GitHub to automatically list all your company and personal repositories.
+                </p>
+              </div>
+              <a
+                href="/auth"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 6,
+                  backgroundColor: GREEN,
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Connect GitHub
+              </a>
+            </div>
+          )}
+
           {/* Repository Selector */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -282,7 +328,7 @@ export default function GitHubImportModal({
                   cursor: "pointer",
                 }}
               >
-                {showAddRepo ? "Cancel" : "+ Connect new repository"}
+                {showAddRepo ? "Cancel" : "+ Add custom repository"}
               </button>
             </div>
 
@@ -323,7 +369,6 @@ export default function GitHubImportModal({
                   placeholder="GitHub URL (https://github.com/facebook/react)"
                   value={newRepoUrl}
                   onChange={(e) => setNewRepoUrl(e.target.value)}
-                  required
                   style={{ height: 36, padding: "0 10px", borderRadius: 6, border: `1px solid ${BORDER}`, fontSize: 13 }}
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -385,7 +430,7 @@ export default function GitHubImportModal({
               style={{
                 border: `1px solid ${BORDER}`,
                 borderRadius: 8,
-                maxHeight: 200,
+                maxHeight: 220,
                 overflowY: "auto",
                 backgroundColor: "#ffffff",
               }}
@@ -400,7 +445,12 @@ export default function GitHubImportModal({
                   return (
                     <div
                       key={issue.id}
-                      onClick={() => setSelectedIssue(issue)}
+                      onClick={() => {
+                        setSelectedIssue(issue);
+                        if (issue.labels && issue.labels.length > 0) {
+                          setTechnology(issue.labels[0].name);
+                        }
+                      }}
                       style={{
                         padding: "10px 14px",
                         borderBottom: `1px solid ${BORDER}`,
@@ -415,7 +465,7 @@ export default function GitHubImportModal({
                         </span>
                         {isSelected && (
                           <span style={{ fontSize: 11, fontWeight: 800, color: GREEN, textTransform: "uppercase" }}>
-                            Selected
+                            Selected ✓
                           </span>
                         )}
                       </div>

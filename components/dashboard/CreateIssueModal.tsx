@@ -16,6 +16,7 @@ interface Repository {
   owner: string;
   url: string;
   opted_in: boolean;
+  description?: string | null;
 }
 
 interface GitHubIssue {
@@ -27,6 +28,10 @@ interface GitHubIssue {
   state: string;
   labels: Array<{ name: string; color: string }>;
   created_at: string;
+  user?: {
+    login: string;
+    avatar_url: string;
+  } | null;
 }
 
 interface CreateIssueModalProps {
@@ -42,8 +47,10 @@ export default function CreateIssueModal({
   onSuccess,
   userRole = "developer",
 }: CreateIssueModalProps) {
-  const [activeTab, setActiveTab] = useState<"manual" | "github">("manual");
+  const [activeTab, setActiveTab] = useState<"manual" | "github">("github");
   const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [hasConnectedGithub, setHasConnectedGithub] = useState<boolean | null>(null);
+  const [githubHandle, setGithubHandle] = useState<string | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
 
   // Manual Form State
@@ -57,7 +64,7 @@ export default function CreateIssueModal({
   const [issueUrl, setIssueUrl] = useState("");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [technology, setTechnology] = useState("TypeScript");
-  const [isBounty, setIsBounty] = useState(false);
+  const [isBounty, setIsBounty] = useState(userRole === "business");
   const [rewardAmount, setRewardAmount] = useState(500);
 
   // GitHub Import State
@@ -86,10 +93,23 @@ export default function CreateIssueModal({
 
       if (repoRes.ok) {
         const repoData = await repoRes.json();
-        const list = repoData.repositories || [];
+        const list: Repository[] = repoData.repositories || [];
+        const connected = Boolean(repoData.hasConnectedGithub);
         setRepositories(list);
+        setHasConnectedGithub(connected);
+        if (repoData.githubHandle) setGithubHandle(repoData.githubHandle);
+
+        // Auto-select tab: if business or GitHub connected, default to "github" tab
+        if (connected || userRole === "business") {
+          setActiveTab("github");
+        } else {
+          setActiveTab("manual");
+        }
+
         if (list.length > 0) {
           setSelectedRepoId(list[0].id);
+          // Auto-fetch issues from the first repo immediately
+          handleFetchGithubIssues(list[0]);
         } else {
           setUseExistingRepo(false);
         }
@@ -97,7 +117,6 @@ export default function CreateIssueModal({
 
       if (walletRes.ok) {
         const walletData = await walletRes.json();
-        // Parse raw available balance
         const bal = parseInt(String(walletData.balance || "").replace(/[^0-9]/g, ""), 10);
         setUserCoins(Number.isNaN(bal) ? 0 : bal);
       }
@@ -111,6 +130,7 @@ export default function CreateIssueModal({
   const handleFetchGithubIssues = async (repo: Repository) => {
     setLoadingIssues(true);
     setStatusMsg(null);
+    setSelectedGithubIssue(null);
     try {
       const res = await fetch(
         `/api/github/issues?owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.name)}`,
@@ -120,11 +140,11 @@ export default function CreateIssueModal({
         setGithubIssues(json.issues);
       } else {
         setGithubIssues([]);
-        setStatusMsg({ text: json.error || "Could not fetch GitHub issues", isError: true });
+        setStatusMsg({ text: json.error || "Could not fetch GitHub issues for this repository.", isError: true });
       }
     } catch {
       setGithubIssues([]);
-      setStatusMsg({ text: "Network error fetching GitHub issues", isError: true });
+      setStatusMsg({ text: "Network error fetching GitHub issues.", isError: true });
     } finally {
       setLoadingIssues(false);
     }
@@ -135,7 +155,7 @@ export default function CreateIssueModal({
     setTitle(issue.title);
     setDescription(issue.body || "");
     setIssueUrl(issue.html_url);
-    if (issue.labels.length > 0) {
+    if (issue.labels && issue.labels.length > 0) {
       setTechnology(issue.labels[0].name);
     }
   };
@@ -143,7 +163,7 @@ export default function CreateIssueModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setStatusMsg({ text: "Please enter an issue title.", isError: true });
+      setStatusMsg({ text: "Please select or enter an issue title.", isError: true });
       return;
     }
 
@@ -193,7 +213,7 @@ export default function CreateIssueModal({
       if (!res.ok) {
         setStatusMsg({ text: data.error || "Failed to create issue.", isError: true });
       } else {
-        setStatusMsg({ text: "Issue created and published to the Issue Pool successfully!", isError: false });
+        setStatusMsg({ text: "Issue published to the Issue Pool successfully!", isError: false });
         setTimeout(() => {
           onClose();
           if (onSuccess) onSuccess();
@@ -251,7 +271,7 @@ export default function CreateIssueModal({
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: CHARCOAL }}>
-                Post New Issue to Pool
+                Post Issue to Pool
               </h3>
               <span
                 style={{
@@ -268,7 +288,7 @@ export default function CreateIssueModal({
               </span>
             </div>
             <p style={{ margin: "3px 0 0", fontSize: 13, color: MUTED }}>
-              Publish open engineering tasks or bounties for competitive community contribution.
+              Directly select open GitHub issues from your repositories or specify a custom issue spec.
             </p>
           </div>
           <button
@@ -291,26 +311,11 @@ export default function CreateIssueModal({
         >
           <button
             type="button"
-            onClick={() => setActiveTab("manual")}
-            style={{
-              padding: "12px 16px",
-              border: "none",
-              borderBottom: activeTab === "manual" ? `2px solid ${GREEN}` : "2px solid transparent",
-              backgroundColor: "transparent",
-              fontWeight: 700,
-              fontSize: 13,
-              color: activeTab === "manual" ? GREEN : MUTED,
-              cursor: "pointer",
-            }}
-          >
-            Manual Task Spec
-          </button>
-          <button
-            type="button"
             onClick={() => {
               setActiveTab("github");
               if (repositories.length > 0) {
-                handleFetchGithubIssues(repositories[0]);
+                const repo = repositories.find((r) => r.id === selectedRepoId) || repositories[0];
+                handleFetchGithubIssues(repo);
               }
             }}
             style={{
@@ -324,7 +329,23 @@ export default function CreateIssueModal({
               cursor: "pointer",
             }}
           >
-            Import from GitHub
+            GitHub Repository Sync
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("manual")}
+            style={{
+              padding: "12px 16px",
+              border: "none",
+              borderBottom: activeTab === "manual" ? `2px solid ${GREEN}` : "2px solid transparent",
+              backgroundColor: "transparent",
+              fontWeight: 700,
+              fontSize: 13,
+              color: activeTab === "manual" ? GREEN : MUTED,
+              cursor: "pointer",
+            }}
+          >
+            Manual Task Entry
           </button>
         </div>
 
@@ -347,9 +368,50 @@ export default function CreateIssueModal({
 
           {activeTab === "github" && (
             <div>
-              <div style={{ marginBottom: 12 }}>
+              {/* GitHub connection check banner */}
+              {hasConnectedGithub === false && (
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 10,
+                    backgroundColor: "#fffbeb",
+                    border: "1px solid #fde68a",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 16,
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: 13, color: "#92400e" }}>
+                      Connect your GitHub account to auto-load repositories
+                    </strong>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "#b45309" }}>
+                      Link GitHub in profile settings so your organizations and issues appear automatically.
+                    </p>
+                  </div>
+                  <a
+                    href="/auth"
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: 6,
+                      backgroundColor: GREEN,
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      textDecoration: "none",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Connect GitHub
+                  </a>
+                </div>
+              )}
+
+              {/* Repository Selector */}
+              <div style={{ marginBottom: 14 }}>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
-                  Choose Connected Repository
+                  Select Repository {loadingRepos && " (Loading...)"}
                 </label>
                 <select
                   value={selectedRepoId}
@@ -358,6 +420,7 @@ export default function CreateIssueModal({
                     const repo = repositories.find((r) => r.id === e.target.value);
                     if (repo) handleFetchGithubIssues(repo);
                   }}
+                  disabled={repositories.length === 0}
                   style={{
                     width: "100%",
                     height: 40,
@@ -365,106 +428,99 @@ export default function CreateIssueModal({
                     border: `1px solid ${BORDER}`,
                     padding: "0 12px",
                     fontSize: 13,
+                    backgroundColor: "#ffffff",
+                    color: CHARCOAL,
                   }}
                 >
-                  {repositories.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.owner}/{r.name}
-                    </option>
-                  ))}
+                  {repositories.length === 0 ? (
+                    <option value="">No repositories available</option>
+                  ) : (
+                    repositories.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.owner}/{r.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
-              <div
-                style={{
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 8,
-                  maxHeight: 180,
-                  overflowY: "auto",
-                  backgroundColor: "#ffffff",
-                  marginBottom: 16,
-                }}
-              >
-                {loadingIssues ? (
-                  <p style={{ padding: 14, margin: 0, fontSize: 13, color: MUTED, textAlign: "center" }}>
-                    Fetching issues from GitHub...
-                  </p>
-                ) : githubIssues.length === 0 ? (
-                  <p style={{ padding: 14, margin: 0, fontSize: 13, color: MUTED, textAlign: "center" }}>
-                    No open issues found for this repository.
-                  </p>
-                ) : (
-                  githubIssues.map((issue) => (
-                    <div
-                      key={issue.id}
-                      onClick={() => handleSelectGithubIssue(issue)}
-                      style={{
-                        padding: "10px 14px",
-                        borderBottom: `1px solid ${BORDER}`,
-                        cursor: "pointer",
-                        backgroundColor: selectedGithubIssue?.id === issue.id ? MINT_SOFT : "#ffffff",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: CHARCOAL }}>
-                          #{issue.number} {issue.title}
-                        </span>
-                        {selectedGithubIssue?.id === issue.id && (
-                          <span style={{ fontSize: 11, fontWeight: 800, color: GREEN }}>SELECTED</span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+              {/* Issue Selector Box */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
+                  Select Open GitHub Issue to Import
+                </label>
+                <div
+                  style={{
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 8,
+                    maxHeight: 220,
+                    overflowY: "auto",
+                    backgroundColor: "#ffffff",
+                  }}
+                >
+                  {loadingIssues ? (
+                    <p style={{ padding: 16, margin: 0, fontSize: 13, color: MUTED, textAlign: "center" }}>
+                      Fetching open issues from GitHub...
+                    </p>
+                  ) : githubIssues.length === 0 ? (
+                    <p style={{ padding: 16, margin: 0, fontSize: 13, color: MUTED, textAlign: "center" }}>
+                      No open issues found for this repository.
+                    </p>
+                  ) : (
+                    githubIssues.map((issue) => {
+                      const isSelected = selectedGithubIssue?.id === issue.id;
+                      return (
+                        <div
+                          key={issue.id}
+                          onClick={() => handleSelectGithubIssue(issue)}
+                          style={{
+                            padding: "12px 14px",
+                            borderBottom: `1px solid ${BORDER}`,
+                            cursor: "pointer",
+                            backgroundColor: isSelected ? MINT_SOFT : "#ffffff",
+                            transition: "background 0.15s ease",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: CHARCOAL }}>
+                              #{issue.number} {issue.title}
+                            </span>
+                            {isSelected && (
+                              <span style={{ fontSize: 11, fontWeight: 800, color: GREEN, textTransform: "uppercase" }}>
+                                SELECTED ✓
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+                            {issue.user && (
+                              <span style={{ fontSize: 11, color: MUTED }}>by @{issue.user.login}</span>
+                            )}
+                            {issue.labels.map((l) => (
+                              <span
+                                key={l.name}
+                                style={{
+                                  fontSize: 10,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  backgroundColor: `#${l.color}22`,
+                                  color: CHARCOAL,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                {l.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Issue Details Fields */}
-          <div>
-            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
-              Issue Title *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Implement Turbopack Cache Middleware for Edge Functions"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{
-                width: "100%",
-                height: 40,
-                padding: "0 12px",
-                borderRadius: 8,
-                border: `1px solid ${BORDER}`,
-                fontSize: 14,
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
-              Description / Acceptance Criteria
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Describe the bug or feature, steps to reproduce, or requirements for a winning PR..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: `1px solid ${BORDER}`,
-                fontSize: 13,
-                fontFamily: "inherit",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          {/* Repository Selection */}
+          {/* Manual Repo selection if manual tab */}
           {activeTab === "manual" && (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -540,6 +596,50 @@ export default function CreateIssueModal({
             </div>
           )}
 
+          {/* Selected Issue Details Fields */}
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
+              Issue Title *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Implement Turbopack Cache Middleware for Edge Functions"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              style={{
+                width: "100%",
+                height: 40,
+                padding: "0 12px",
+                borderRadius: 8,
+                border: `1px solid ${BORDER}`,
+                fontSize: 14,
+                outline: "none",
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: CHARCOAL, marginBottom: 6 }}>
+              Description / Acceptance Criteria
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Describe the bug or feature, steps to reproduce, or requirements for a winning PR..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: `1px solid ${BORDER}`,
+                fontSize: 13,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+          </div>
+
           {/* Difficulty & Technology */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div>
@@ -567,7 +667,7 @@ export default function CreateIssueModal({
 
             <div>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: MUTED, marginBottom: 4 }}>
-                Technology / Tag
+                Technology / Stack Tag
               </label>
               <input
                 type="text"
@@ -588,7 +688,7 @@ export default function CreateIssueModal({
 
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: MUTED, marginBottom: 4 }}>
-              GitHub Issue URL (Optional)
+              GitHub Issue URL
             </label>
             <input
               type="url"
@@ -627,7 +727,7 @@ export default function CreateIssueModal({
                   onChange={(e) => setIsBounty(e.target.checked)}
                 />
                 <label htmlFor="bountyCheckbox" style={{ fontSize: 13, fontWeight: 700, color: CHARCOAL, cursor: "pointer" }}>
-                  Fund with GIG Coins Bounty
+                  Fund with GIG Coins Bounty (Lock into Escrow)
                 </label>
               </div>
               {userCoins !== null && (
@@ -664,7 +764,7 @@ export default function CreateIssueModal({
               </div>
             ) : (
               <p style={{ margin: 0, fontSize: 12, color: GREEN, fontWeight: 500 }}>
-                ✓ Listed as a verified Open Source Contribution (free to post, awards reputation & tamper-proof PR credit to contributors).
+                ✓ Listed as a verified Open Source Contribution (free to post, awards reputation & tamper-proof PR credit).
               </p>
             )}
           </div>
