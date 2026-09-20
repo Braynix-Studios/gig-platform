@@ -372,6 +372,67 @@ export async function debitWallet(
   return { ok: true, newBalance: availableBalance - input.amount };
 }
 
+export interface CreditTopupInput {
+  userId: string;
+  amount: number;
+  currency?: string;
+}
+
+export async function creditTopup(
+  input: CreditTopupInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  const client = clientOverride ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  let { data: wallet } = await client
+    .from("wallets")
+    .select()
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (!wallet) {
+    const { data: newWallet, error: createError } = await client
+      .from("wallets")
+      .insert({
+        user_id: input.userId,
+        available_balance: 0,
+        total_earned: 0,
+        currency: input.currency ?? "INR",
+      })
+      .select()
+      .single();
+    if (createError || !newWallet) {
+      return { ok: false, error: createError?.message || "Failed to create wallet" };
+    }
+    wallet = newWallet;
+  }
+
+  const currentBalance = wallet.available_balance ?? 0;
+  const newBalance = currentBalance + input.amount;
+
+  const { error: updateError } = await client
+    .from("wallets")
+    .update({ available_balance: newBalance })
+    .eq("id", wallet.id);
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  const { error: txError } = await client.from("wallet_transactions").insert({
+    wallet_id: wallet.id,
+    task_id: null,
+    contribution_id: null,
+    amount: input.amount,
+    currency: input.currency ?? "INR",
+    type: "TOPUP",
+    status: "COMPLETED",
+  });
+
+  if (txError) return { ok: false, error: txError.message };
+
+  return { ok: true, newBalance };
+}
+
 export async function getUserByGithubId(
   githubId: string,
   clientOverride?: SupabaseClient | null,
@@ -620,6 +681,20 @@ export async function getTaskById(id: string): Promise<Task | null> {
   return data;
 }
 
+export async function updateTaskStatus(
+  taskId: string,
+  status: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<boolean> {
+  const client = clientOverride ?? db();
+  if (!client) return false;
+  const { error } = await client
+    .from("tasks")
+    .update({ status })
+    .eq("id", taskId);
+  return !error;
+}
+
 export async function getTasksByRepository(
   repositoryId: string,
 ): Promise<Task[]> {
@@ -684,6 +759,40 @@ export async function getActiveClaimForTask(
     .maybeSingle();
   if (error) return null;
   return data;
+}
+
+export async function getActiveClaimForUserAndTask(
+  taskId: string,
+  userId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<Claim | null> {
+  const client = clientOverride ?? db();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("claims")
+    .select()
+    .eq("task_id", taskId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+export async function expireOtherClaimsForTask(
+  taskId: string,
+  winningClaimId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<boolean> {
+  const client = clientOverride ?? db();
+  if (!client) return false;
+  const { error } = await client
+    .from("claims")
+    .update({ status: "expired" })
+    .eq("task_id", taskId)
+    .neq("id", winningClaimId)
+    .eq("status", "active");
+  return !error;
 }
 
 export async function setClaimStatus(

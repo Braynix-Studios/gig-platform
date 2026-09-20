@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, FormEvent } from "react";
 import DevHeader from "@/components/dashboard/DevHeader";
@@ -437,36 +438,56 @@ case "profile":
             {/* Edit Button / Save & Cancel Buttons */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 16 }}>
               {!isEditing ? (
-                <button
-                  onClick={() => {
-                    // Initialize form values with current data when entering edit mode
-setFormValues({
-                   username: data.username || data.displayName || "",
-                   handle: data.handle || "",
-                   avatar_url: data.avatar_url || null,
-                   github_handle: data.github_handle || null,
-                   bio: data.bio || null,
-                   company: data.company || null,
-                   location: data.location || null,
-                   followers_count: data.followers_count ?? null,
-                   public_repos_count: data.public_repos_count ?? null
-                 });
-                    setIsEditing(true);
-                  }}
-                  style={{
-                    height: 36,
-                    padding: "0 16px",
-                    backgroundColor: MINT,
-                    color: MINT_FG,
-                    border: "none",
-                    borderRadius: 6,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer"
-                  }}
-                >
-                  Edit Profile
-                </button>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Link
+                    href="/profile"
+                    style={{
+                      height: 36,
+                      padding: "0 16px",
+                      backgroundColor: "#ffffff",
+                      color: CHARCOAL,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    Full Profile &rarr;
+                  </Link>
+                  <button
+                    onClick={() => {
+                      // Initialize form values with current data when entering edit mode
+                      setFormValues({
+                        username: data.username || data.displayName || "",
+                        handle: data.handle || "",
+                        avatar_url: data.avatar_url || null,
+                        github_handle: data.github_handle || null,
+                        bio: data.bio || null,
+                        company: data.company || null,
+                        location: data.location || null,
+                        followers_count: data.followers_count ?? null,
+                        public_repos_count: data.public_repos_count ?? null
+                      });
+                      setIsEditing(true);
+                    }}
+                    style={{
+                      height: 36,
+                      padding: "0 16px",
+                      backgroundColor: MINT,
+                      color: MINT_FG,
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Edit Profile
+                  </button>
+                </div>
               ) : (
                 <>
                   <button

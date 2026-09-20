@@ -6,6 +6,7 @@ import {
   claimTask,
   getTaskById,
   getActiveClaimForTask,
+  getActiveClaimForUserAndTask,
   submitPR,
 } from '@/lib/db-operations';
 
@@ -81,8 +82,8 @@ export async function submitPrAction(
     };
   }
 
-  const claim = await getActiveClaimForTask(taskId);
-  if (!claim || claim.user_id !== session.userId) {
+  const claim = await getActiveClaimForUserAndTask(taskId, session.userId);
+  if (!claim) {
     return { ok: false, message: 'Claim this issue first before submitting a PR.' };
   }
 

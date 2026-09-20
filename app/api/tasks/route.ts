@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClientWithCookies } from "@/lib/supabaseClient";
+import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
-import { getRepositories, getUserById } from "@/lib/db-operations";
+import { getRepositories, getUserById, debitWallet } from "@/lib/db-operations";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -11,54 +11,109 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const session = await getSession();
-    if (!session || session.role !== "business") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session || !session.userId) {
+      return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
     const body = await request.json();
-    const { repository_id, title, description, difficulty, technology, reward_amount, reward_currency, issue_url } = body;
+    const {
+      repository_id,
+      repo_owner,
+      repo_name,
+      repo_url,
+      title,
+      description,
+      difficulty,
+      technology,
+      reward_amount,
+      reward_currency,
+      issue_url,
+    } = body;
 
-    if (!repository_id || !title) {
-      return NextResponse.json({ error: "repository_id and title are required" }, { status: 400 });
+    if (!title || !title.trim()) {
+      return NextResponse.json({ error: "Issue title is required" }, { status: 400 });
     }
 
-    // Verify the business owns the repository
-    const user = await getUserById(session.userId, supabase);
-    if (!user?.company) {
-      return NextResponse.json({ error: "No company associated with this account" }, { status: 403 });
-    }
+    // Resolve or automatically register target repository
+    let targetRepoId = repository_id;
 
-    const repositories = await getRepositories({ owner: user.company }, supabase);
-    const repo = repositories.find((r) => r.id === repository_id);
-    if (!repo) {
-      return NextResponse.json({ error: "Repository not found or access denied" }, { status: 403 });
-    }
+    if (!targetRepoId) {
+      if (!repo_owner || !repo_name) {
+        return NextResponse.json(
+          { error: "Either repository_id or repo_owner and repo_name are required" },
+          { status: 400 },
+        );
+      }
 
-    // BUG-004 FIX: Deduct sponsor escrow balance upfront when creating task
-    if (reward_amount && reward_amount > 0) {
-      const { debitWallet } = await import('@/lib/db-operations');
-      const debitResult = await debitWallet({
-        userId: session.userId,
-        amount: reward_amount,
-        currency: reward_currency || "INR"
-      }, supabase);
-      
-      if (!debitResult.ok) {
-        return NextResponse.json({ error: `Insufficient escrow balance: ${debitResult.error}` }, { status: 400 });
+      const githubRepoId = `${repo_owner.trim()}/${repo_name.trim()}`;
+      const dbClient = supabaseAdmin ?? supabase;
+
+      const { data: existingRepo } = await dbClient
+        .from("repositories")
+        .select("id")
+        .eq("github_repo_id", githubRepoId)
+        .maybeSingle();
+
+      if (existingRepo) {
+        targetRepoId = existingRepo.id;
+      } else {
+        const { data: newRepo, error: repoError } = await dbClient
+          .from("repositories")
+          .insert({
+            github_repo_id: githubRepoId,
+            name: repo_name.trim(),
+            owner: repo_owner.trim(),
+            url: repo_url?.trim() || `https://github.com/${githubRepoId}`,
+            opted_in: true,
+            opted_in_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (repoError || !newRepo) {
+          return NextResponse.json(
+            { error: repoError?.message || "Failed to register repository for this issue" },
+            { status: 400 },
+          );
+        }
+        targetRepoId = newRepo.id;
       }
     }
 
-    const { data: task, error } = await supabase
+    const reward = Number(reward_amount);
+    const hasBounty = reward && reward > 0;
+
+    // If task has a coin bounty, deduct from user's GIG Coins wallet into Escrow
+    if (hasBounty) {
+      const debitResult = await debitWallet(
+        {
+          userId: session.userId,
+          amount: reward,
+          currency: reward_currency || "INR",
+        },
+        supabaseAdmin ?? supabase,
+      );
+
+      if (!debitResult.ok) {
+        return NextResponse.json(
+          { error: `Insufficient GIG Coins balance: ${debitResult.error || "Please top up your wallet."}` },
+          { status: 400 },
+        );
+      }
+    }
+
+    const dbClient = supabaseAdmin ?? supabase;
+    const { data: task, error } = await dbClient
       .from("tasks")
       .insert({
-        repository_id,
-        title,
-        description: description || null,
-        issue_url: issue_url || null,
+        repository_id: targetRepoId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        issue_url: issue_url?.trim() || null,
         difficulty: difficulty || "medium",
-        technology: technology || null,
+        technology: technology?.trim() || null,
         status: "open",
-        reward_amount: reward_amount || null,
+        reward_amount: hasBounty ? reward : null,
         reward_currency: reward_currency || "INR",
       })
       .select()

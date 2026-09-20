@@ -9,6 +9,7 @@ import {
   submitPrAction,
   type DevLoopState,
 } from "@/app/actions/dev-loop";
+import CreateIssueModal from "@/components/dashboard/CreateIssueModal";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -26,6 +27,7 @@ type SortKey = "newest" | "reward-desc" | "reward-asc" | "difficulty-hard";
 interface IssuePoolProps {
   data: IssuePoolData;
   role: "developer" | "business";
+  onOpenImportModal?: () => void;
 }
 
 function currency(amount: number): string {
@@ -320,14 +322,15 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
   );
 }
 
-export default function IssuePool({ data, role }: IssuePoolProps) {
+export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolProps) {
+   const [createModalOpen, setCreateModalOpen] = useState(false);
    const [query, setQuery] = useState("");
    const [skill, setSkill] = useState("all");
    const [difficulty, setDifficulty] = useState("all");
    const [sort, setSort] = useState<SortKey>("newest");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
-  const base = role === "business" ? "/dashboard/business" : "/dashboard/developer";
+   const [page, setPage] = useState(1);
+   const [pageSize, setPageSize] = useState(5);
+   const base = role === "business" ? "/dashboard/business" : "/dashboard/developer";
 
   // Optimistic list state: claims/submits reflect instantly while the
   // server action + revalidation completes in the background.
@@ -557,11 +560,27 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
                 : "Browse every open issue across the network, claim what fits, and earn verified rewards."}
             </p>
           </div>
-          {role === "business" ? (
-            <Link href={`${base}?tab=tasks-backlog`} style={buttonLike(MINT, MINT_FG)}>Create issue</Link>
-          ) : (
-            <button type="button" style={buttonLike(MINT, MINT_FG)}>Create issue</button>
-          )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {role === "business" && onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                style={{
+                  ...buttonLike("#ffffff", CHARCOAL),
+                  border: `1px solid ${BORDER}`,
+                }}
+              >
+                Sync GitHub Repo
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setCreateModalOpen(true)}
+              style={buttonLike(MINT, MINT_FG)}
+            >
+              + Post New Issue
+            </button>
+          </div>
         </div>
 
         {/* Summary metrics */}
@@ -956,6 +975,12 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
           </Link>
         </div>
       </div>
+
+      <CreateIssueModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        userRole={role}
+      />
     </div>
   );
 }

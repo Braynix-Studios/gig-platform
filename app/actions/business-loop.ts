@@ -11,6 +11,8 @@ import {
   createContribution,
   setClaimStatus,
   creditReward,
+  updateTaskStatus,
+  expireOtherClaimsForTask,
 } from '@/lib/db-operations';
 
 export interface BusinessReviewState {
@@ -102,6 +104,10 @@ export async function reviewSubmissionAction(
   }
 
   await setClaimStatus(submission.claim_id, 'completed');
+  // Competitive racing resolution: mark task completed and expire competitor claims
+  await updateTaskStatus(task.id, 'closed');
+  await expireOtherClaimsForTask(task.id, submission.claim_id);
+
   revalidatePath('/dashboard/business', 'page');
   revalidatePath('/dashboard/developer', 'page');
   return { ok: true, message: `PR verified — ${amount} ${task.reward_currency || 'INR'} paid out to the developer.` };

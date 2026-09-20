@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import BizHeader from "@/components/dashboard/BizHeader";
 import SectionHeading from "@/components/dashboard/SectionHeading";
@@ -10,6 +11,7 @@ import MintButton from "@/components/dashboard/MintButton";
 import Card from "@/components/dashboard/Card";
 import IssuePool from "@/components/dashboard/IssuePool";
 import SubmissionsReviewPanel from "@/components/dashboard/SubmissionsReviewPanel";
+import GitHubImportModal from "@/components/dashboard/GitHubImportModal";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import type { SubmissionReview } from "@/lib/db-operations";
 
@@ -147,12 +149,30 @@ function Metrics({ metrics }: { metrics: BizMetric[] }) {
   );
 }
 
-function TabContent({ activeTab, data, issuePool, reviews }: { activeTab: BizTab; data: BusinessDashboardData; issuePool?: IssuePoolData; reviews?: SubmissionReview[] }) {
+function TabContent({
+  activeTab,
+  data,
+  issuePool,
+  reviews,
+  onOpenImportModal,
+}: {
+  activeTab: BizTab;
+  data: BusinessDashboardData;
+  issuePool?: IssuePoolData;
+  reviews?: SubmissionReview[];
+  onOpenImportModal: () => void;
+}) {
   const { metrics, backlogTasks, talentPool, disbursals } = data;
 
   switch (activeTab) {
     case "issue-pool":
-      return <IssuePool data={issuePool ?? createEmptyBizIssuePool()} role="business" />;
+      return (
+        <IssuePool
+          data={issuePool ?? createEmptyBizIssuePool()}
+          role="business"
+          onOpenImportModal={onOpenImportModal}
+        />
+      );
 
     case "tasks-backlog":
       return (
@@ -163,10 +183,34 @@ function TabContent({ activeTab, data, issuePool, reviews }: { activeTab: BizTab
           </section>
 
           <section id="tasks" style={{ marginBottom: 40, scrollMarginTop: 24 }}>
-            <SectionHeading title="Task Backlog & Post a Task" sub="Production task specifications, contributor assignments, and milestone deliverables" right={<MintButton href="/dashboard/business?tab=tasks-backlog">Create Task Spec</MintButton>} />
+            <SectionHeading
+              title="Task Backlog & Post a Task"
+              sub="Production task specifications, contributor assignments, and milestone deliverables"
+              right={
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={onOpenImportModal}
+                    style={{
+                      height: 40,
+                      padding: "0 18px",
+                      borderRadius: 8,
+                      backgroundColor: GREEN,
+                      border: "none",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Import from GitHub
+                  </button>
+                </div>
+              }
+            />
             <Card><TaskTable tasks={backlogTasks} isBusiness={true} /></Card>
             {backlogTasks.length === 0 && (
-              <p style={{ margin: "12px 0 0", fontSize: 12, color: MUTED }}>No tasks posted yet. Create your first task spec above.</p>
+              <p style={{ margin: "12px 0 0", fontSize: 12, color: MUTED }}>No tasks posted yet. Click 'Import from GitHub' above to add your first issue.</p>
             )}
           </section>
         </>
@@ -219,14 +263,15 @@ function TabContent({ activeTab, data, issuePool, reviews }: { activeTab: BizTab
     case "billing":
       return (
         <section id="billing" style={{ scrollMarginTop: 24 }}>
-          <SectionHeading title="Escrow Account & Billing / Disbursals" sub="Deterministic escrow management, automated bounty disbursals, and on-chain receipts" right={<MintButton href="/dashboard/business?tab=billing">Deposit Treasury Funds</MintButton>} />
-          <EscrowCard disbursals={disbursals} vaultAmount="$32,500" lockedAmount="$14,200 USDC" disbursedAmount="$18,300 USDC" nextInvoiceDate="Monthly (Next: Oct 1)" />
+          <SectionHeading title="Escrow Account & Billing / Disbursals" sub="Deterministic escrow management, automated bounty disbursals, and on-chain receipts" />
+          <EscrowCard disbursals={disbursals} vaultAmount="14,200" lockedAmount="4,800 Coins" disbursedAmount="9,400 Coins" nextInvoiceDate="Monthly (Next: Oct 1)" />
         </section>
       );
   }
 }
 
 export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews }: BusinessDashboardProps) {
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const searchParams = useSearchParams();
   const activeTab: BizTab = (() => {
     const tab = searchParams?.get("tab") as BizTab;
@@ -255,8 +300,19 @@ export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews 
             githubHandle={data.githubHandle}
           />
         )}
-        <TabContent activeTab={activeTab} data={data} issuePool={issuePool} reviews={reviews} />
+        <TabContent
+          activeTab={activeTab}
+          data={data}
+          issuePool={issuePool}
+          reviews={reviews}
+          onOpenImportModal={() => setImportModalOpen(true)}
+        />
       </div>
+
+      <GitHubImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+      />
     </div>
   );
 }

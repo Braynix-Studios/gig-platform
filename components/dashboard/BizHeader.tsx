@@ -141,6 +141,26 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           + Post a Task
         </Link>
         <Link
+          href="/profile"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 16px",
+            borderRadius: 6,
+            backgroundColor: "transparent",
+            color: "#ffffff",
+            border: `1.5px solid rgba(255,255,255,0.25)`,
+            fontWeight: 600,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Profile
+        </Link>
+        <Link
           href="/dashboard/business?tab=billing"
           style={{
             display: "inline-flex",

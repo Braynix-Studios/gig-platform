@@ -111,6 +111,25 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
             </a>
           )}
           <Link
+            href="/profile"
+            className="inline-flex items-center justify-center gap-2"
+            style={{
+              height: 44,
+              padding: "0 16px",
+              borderRadius: 6,
+              backgroundColor: "transparent",
+              border: `1.5px solid ${BORDER}`,
+              color: CHARCOAL,
+              fontWeight: 600,
+              fontSize: 14,
+              whiteSpace: "nowrap",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+            }}
+          >
+            Profile
+          </Link>
+          <Link
             href="/dashboard/developer?tab=wallet"
             className="inline-flex items-center justify-center gap-2"
             style={{
