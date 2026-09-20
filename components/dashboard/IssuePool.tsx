@@ -675,22 +675,42 @@ export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolPr
   const start = (currentPage - 1) * pageSize;
   const visible = filtered.slice(start, start + pageSize);
 
+  const [savedTasksCount, setSavedTasksCount] = useState<number>(0);
+
+  useEffect(() => {
+    setSavedTasksCount(getSavedTasks().length);
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.count === "number") {
+        setSavedTasksCount(detail.count);
+      } else {
+        setSavedTasksCount(getSavedTasks().length);
+      }
+    };
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("gig_tasks_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
   const metrics = useMemo(() => {
     if (role === "business") {
       return [
         { label: "Open issues", value: String(data.openCount), sub: data.company ? `raised by ${data.company}` : "raised by your company", highlight: false },
         { label: "Claimed by devs", value: String(data.claimedTotal), sub: "active locks across your issues", highlight: false },
         { label: "Rewards committed", value: currency(data.rewardTotal), sub: "locked in escrow till verification", highlight: false },
-        { label: "Engagement", value: data.matchScore, sub: "of your issues claimed by devs", highlight: true },
+        { label: "Saved in Backlog", value: String(savedTasksCount), sub: "tasks queued for developers", highlight: true },
       ];
     }
     return [
       { label: "Open issues", value: String(data.openCount), sub: "available to claim right now", highlight: false },
-      { label: "My claimed issues", value: String(data.claimedByMe), sub: "active locks with 48h expiry", highlight: false },
+      { label: "My active & saved tasks", value: String(data.claimedByMe + savedTasksCount), sub: "active locks and saved tasks", highlight: true },
       { label: "Available rewards", value: currency(data.rewardTotal), sub: "across the issue pool", highlight: false },
-      { label: "Match score", value: data.matchScore, sub: "how well your profile fits the pool", highlight: true },
+      { label: "Match score", value: data.matchScore, sub: "how well your profile fits the pool", highlight: false },
     ];
-  }, [role, data]);
+  }, [role, data, savedTasksCount]);
 
   const resetPage = () => setPage(1);
 
