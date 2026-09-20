@@ -6,10 +6,10 @@ import { getSidebarStatsSync, type DashboardStats } from "@/lib/dashboard-stats-
 
 const dashboardIcon = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
+    <rect x="3" y="3" width="7" height="9" rx="1" />
+    <rect x="14" y="3" width="7" height="5" rx="1" />
+    <rect x="14" y="12" width="7" height="9" rx="1" />
+    <rect x="3" y="16" width="7" height="5" rx="1" />
   </svg>
 );
 
@@ -91,29 +91,34 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
   const mergedCounts = { ...fallback.counts, ...stats?.counts };
   const mergedStats = stats ? { ...fallback, ...stats, counts: mergedCounts } : fallback;
 
-  const workspaceItems = isBusiness
+  const overviewItem = {
+    label: "Dashboard",
+    tab: "dashboard",
+    icon: dashboardIcon,
+    badge: "LIVE",
+  };
+
+  const workItems = isBusiness
     ? [
-        { label: "Dashboard", tab: "dashboard", icon: dashboardIcon, badge: "LIVE" },
-        { label: "Tasks Backlog", tab: "tasks-backlog", icon: tasksIcon, count: mergedStats.counts?.["Tasks Backlog"] ?? "0" },
-        { label: "Issue Pool", tab: "issue-pool", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "11" },
+        { label: "Issue Pool", tab: "issue-pool", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "0" },
         { label: "Talent Pool", tab: "talent-pool", icon: talentIcon, count: mergedStats.counts?.["Talent Pool"] ?? "42" },
         { label: "Workspace", tab: "workspace", icon: overviewIcon },
       ]
     : [
-        { label: "Dashboard", tab: "dashboard", icon: dashboardIcon, badge: "LIVE" },
-        { label: "Tasks", tab: "tasks", icon: tasksIcon, count: mergedStats.counts?.["Tasks"] ?? "0" },
-        { label: "Issue Pool", tab: "issues", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "11" },
-        { label: "Verified PRs", tab: "prs", icon: prsIcon, count: mergedStats.counts?.["Verified PRs"] ?? "0" },
+        { label: "Issue Pool", tab: "issues", icon: layersIcon, count: mergedStats.counts?.["Issue Pool"] ?? "0" },
+        { label: "Verified PRs", tab: "prs", icon: prsIcon, count: mergedStats.counts?.["Verified PRs"] ?? "24" },
       ];
 
   const accountItems = isBusiness
     ? [
-        { label: "Profile", tab: "profile", icon: profileIcon },
+        { label: "Tasks Backlog", tab: "tasks-backlog", icon: tasksIcon, count: mergedStats.counts?.["Tasks Backlog"] ?? "8" },
         { label: "Billing/Escrow", tab: "billing", icon: walletIcon },
+        { label: "Profile", tab: "profile", icon: profileIcon },
       ]
     : [
-        { label: "Profile", tab: "profile", icon: profileIcon },
+        { label: "Tasks", tab: "tasks", icon: tasksIcon, count: mergedStats.counts?.["Tasks"] ?? "2" },
         { label: "Wallet", tab: "wallet", icon: walletIcon },
+        { label: "Profile", tab: "profile", icon: profileIcon },
       ];
 
   const isLinkActive = (itemTab: string) => {
@@ -132,14 +137,14 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
           padding: "10px 14px",
           borderRadius: 8,
           backgroundColor: active ? MINT_SOFT : "transparent",
-          color: active ? "#00c950" : CHARCOAL,
+          color: active ? "#257b5a" : CHARCOAL,
           fontWeight: active ? 700 : 500,
           fontSize: "0.875rem",
           textDecoration: "none",
         }}
       >
         <span className="flex items-center gap-3">
-          <span style={{ color: active ? "#00c950" : MUTED }}>{item.icon}</span>
+          <span style={{ color: active ? "#257b5a" : MUTED }}>{item.icon}</span>
           <span>{item.label}</span>
         </span>
         {item.badge ? (
@@ -150,14 +155,15 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
               padding: "2px 7px",
               borderRadius: 9999,
               backgroundColor: active ? "rgba(0, 201, 80, 0.20)" : "rgba(0, 201, 80, 0.10)",
-              color: "#00c950",
+              color: "#257b5a",
               border: "1px solid rgba(0, 201, 80, 0.25)",
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
             }}
           >
-            ● {item.badge}
+            <span style={{ width: 5, height: 5, borderRadius: 9999, backgroundColor: "#00c950" }} />
+            {item.badge}
           </span>
         ) : item.count !== undefined ? (
           <span
@@ -181,7 +187,7 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
   return (
     <div className="md:hidden border-b" style={{ borderColor: BORDER, backgroundColor: "#ffffff", padding: "12px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00c950" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#257b5a" }}>
           {isBusiness ? "SPONSOR WORKSPACE" : "CONTRIBUTION WORKSPACE"}
         </span>
         {userName && (
@@ -193,9 +199,14 @@ export default function MobileDashboardNav({ role, userName, stats }: MobileDash
 
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={{ padding: "4px 0 2px", color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" }}>
-          WORKSPACE
+          OVERVIEW
         </div>
-        {workspaceItems.map(renderRow)}
+        {renderRow(overviewItem)}
+
+        <div style={{ padding: "12px 0 2px", color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" }}>
+          WORK
+        </div>
+        {workItems.map(renderRow)}
 
         <div style={{ padding: "12px 0 2px", color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" }}>
           ACCOUNT
