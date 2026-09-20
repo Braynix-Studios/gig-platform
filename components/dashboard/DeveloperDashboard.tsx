@@ -10,6 +10,7 @@ import ProofOfWorkCard from "@/components/dashboard/ProofOfWorkCard";
 import IssuePool from "@/components/dashboard/IssuePool";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import { cleanGithubHandle } from "@/lib/db-operations";
+import { getSavedTasks } from "@/lib/saved-tasks";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -683,7 +684,19 @@ function TabContent({
     case "issues":
       return <IssuePool data={issuePool ?? createEmptyIssuePool("developer")} role="developer" />;
 
-    case "tasks":
+    case "tasks": {
+      const savedTasksList = getSavedTasks();
+      const savedDevTasks: DevTask[] = savedTasksList.map((st) => ({
+        id: st.id,
+        title: st.title,
+        repo: st.repo,
+        status: "In Progress",
+        assignee: profileState.username || "You",
+        lockedAmount: `₹${(st.reward || 0).toLocaleString("en-IN")}`,
+        lockExpiry: "48h",
+      }));
+      const combinedTasks = [...savedDevTasks, ...tasks];
+
       return (
         <>
           <section id="tasks" aria-label="Contributor stats" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 16, marginTop: 32, scrollMarginTop: 24 }} className="dev-metrics-grid">
@@ -701,11 +714,12 @@ function TabContent({
               </div>
             </div>
             <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
-              <TaskTable tasks={tasks} isBusiness={false} />
+              <TaskTable tasks={combinedTasks} isBusiness={false} />
             </div>
           </section>
         </>
       );
+    }
 
     case "prs":
       return (

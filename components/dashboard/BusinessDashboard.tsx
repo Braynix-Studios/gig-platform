@@ -14,6 +14,7 @@ import SubmissionsReviewPanel from "@/components/dashboard/SubmissionsReviewPane
 import GitHubImportModal from "@/components/dashboard/GitHubImportModal";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import { type SubmissionReview, cleanGithubHandle } from "@/lib/db-operations";
+import { getSavedTasks } from "@/lib/saved-tasks";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -561,7 +562,20 @@ function TabContent({
         />
       );
 
-    case "tasks-backlog":
+    case "tasks-backlog": {
+      const savedTasksList = getSavedTasks();
+      const savedBizTasks: BizTask[] = savedTasksList.map((st) => ({
+        id: st.id,
+        title: st.title,
+        repo: st.repo,
+        budget: `₹${(st.reward || 0).toLocaleString("en-IN")}`,
+        applicantsCount: 1,
+        status: "Active",
+        priority: "High",
+        targetRelease: "v0.2.0",
+      }));
+      const combinedBacklog = [...savedBizTasks, ...backlogTasks];
+
       return (
         <>
           <section id="overview" style={{ marginBottom: 40, scrollMarginTop: 24 }}>
@@ -595,13 +609,11 @@ function TabContent({
                 </div>
               }
             />
-            <Card><TaskTable tasks={backlogTasks} isBusiness={true} /></Card>
-            {backlogTasks.length === 0 && (
-              <p style={{ margin: "12px 0 0", fontSize: 12, color: MUTED }}>No tasks posted yet. Click 'Import from GitHub' above to add your first issue.</p>
-            )}
+            <Card><TaskTable tasks={combinedBacklog} isBusiness={true} /></Card>
           </section>
         </>
       );
+    }
 
     case "talent-pool":
       return (

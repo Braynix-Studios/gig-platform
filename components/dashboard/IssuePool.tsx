@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useOptimistic, useState, useActionState } from "react";
+import { useMemo, useOptimistic, useState, useEffect, useActionState } from "react";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import type { IssuePoolIssue } from "@/lib/dashboard-data";
 import {
@@ -10,6 +10,7 @@ import {
   type DevLoopState,
 } from "@/app/actions/dev-loop";
 import CreateIssueModal from "@/components/dashboard/CreateIssueModal";
+import { getSavedTasks, isTaskSaved, toggleSavedTask } from "@/lib/saved-tasks";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -36,8 +37,8 @@ function currency(amount: number): string {
 
 function buttonLike(bg: string, fg: string): React.CSSProperties {
   return {
-    height: 40,
-    padding: "0 20px",
+    height: 36,
+    padding: "0 18px",
     borderRadius: 8,
     backgroundColor: bg,
     border: "none",
@@ -239,7 +240,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
     ...buttonLike(MINT, "#ffffff"),
     height: 36,
     padding: "0 16px",
-    fontSize: 13,
+    fontSize: 12,
     opacity: claimPending ? 0.6 : 1,
   };
 
@@ -273,12 +274,12 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
             placeholder="https://github.com/…/pull/12"
             aria-label="Pull request URL"
             style={{
-              width: 240,
+              width: 220,
               height: 36,
               padding: "0 12px",
               borderRadius: 8,
               border: `1.5px solid ${BORDER}`,
-              fontSize: 13,
+              fontSize: 12,
               color: CHARCOAL,
               fontFamily: "inherit",
               outline: "none",
@@ -291,7 +292,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
               ...buttonLike("#ffffff", GREEN),
               height: 36,
               padding: "0 16px",
-              fontSize: 13,
+              fontSize: 12,
               border: `1.5px solid ${GREEN}`,
               opacity: submitPending ? 0.6 : 1,
             }}
@@ -308,7 +309,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
             backgroundColor: MINT_FG,
             border: `1.5px solid ${MINT_BDR}`,
             color: GREEN,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 600,
             display: "inline-flex",
             alignItems: "center",
@@ -323,7 +324,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
       {(claimState?.message || submitState?.message) && (
         <span
           style={{
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: 600,
             color: claimState.ok && submitState.ok ? GREEN : "#ea4335",
             lineHeight: 1.4,
@@ -346,6 +347,27 @@ interface IssueCardProps {
 
 function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    setIsSaved(isTaskSaved(issue.id));
+    const handleUpdate = () => setIsSaved(isTaskSaved(issue.id));
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    return () => window.removeEventListener("gig_tasks_updated", handleUpdate);
+  }, [issue.id]);
+
+  const handleToggleTask = () => {
+    const newState = toggleSavedTask({
+      id: issue.id,
+      title: issue.title,
+      repo: issue.repo,
+      reward: issue.reward,
+      difficulty: issue.difficulty,
+      technology: issue.technology,
+      issueUrl: issue.issueUrl,
+    });
+    setIsSaved(newState);
+  };
 
   return (
     <div
@@ -463,7 +485,7 @@ function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
         )}
       </div>
 
-      {/* Bottom Footer Row: Tags & Actions */}
+      {/* Bottom Footer Row: Tags & THREE Action Buttons */}
       <div
         style={{
           display: "flex",
@@ -494,10 +516,37 @@ function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
           ))}
         </div>
 
-        {/* Right: Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {/* Right: THREE Action Buttons (Add to Task, Claim/Submit, GitHub Link) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* BUTTON 1: Add to Task */}
+          <button
+            type="button"
+            onClick={handleToggleTask}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 8,
+              backgroundColor: isSaved ? MINT_SOFT : "#ffffff",
+              border: `1.5px solid ${isSaved ? MINT_BDR : BORDER}`,
+              color: isSaved ? GREEN : CHARCOAL,
+              fontSize: 12,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "all 0.15s ease",
+            }}
+          >
+            {isSaved ? "✓ Added to Task" : "+ Add to Task"}
+          </button>
+
+          {/* BUTTON 2: Claim Issue / Submit PR */}
           {role === "developer" && <DevIssueActions issue={issue} onOptimistic={onOptimistic} />}
-          {issue.issueUrl && (
+
+          {/* BUTTON 3: View GitHub Issue Link */}
+          {issue.issueUrl ? (
             <a
               href={issue.issueUrl}
               target="_blank"
@@ -507,7 +556,7 @@ function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
                 padding: "0 14px",
                 borderRadius: 8,
                 backgroundColor: "#ffffff",
-                border: `1px solid ${BORDER}`,
+                border: `1.5px solid ${BORDER}`,
                 color: CHARCOAL,
                 fontSize: 12,
                 fontWeight: 700,
@@ -530,6 +579,25 @@ function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
               View GitHub Issue
               {iconExternalLink()}
             </a>
+          ) : (
+            <span
+              style={{
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 8,
+                backgroundColor: "#f4f4f5",
+                border: `1.5px solid ${BORDER}`,
+                color: MUTED,
+                fontSize: 12,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+              }}
+            >
+              View GitHub Issue
+            </span>
           )}
         </div>
       </div>

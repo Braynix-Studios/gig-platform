@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { cleanGithubHandle } from "@/lib/db-operations";
+import { getSavedTasks } from "@/lib/saved-tasks";
 
 const CHARCOAL = "#151b1d";
 const MINT = "#00c950";
@@ -23,6 +25,21 @@ function isActive(activeTab: string, tab: string): boolean {
 
 export default function BizHeader({ displayName, displayEmail, activeTab, githubHandle }: BizHeaderProps) {
   const cleanHandle = cleanGithubHandle(githubHandle);
+  const [savedCount, setSavedCount] = useState<number>(0);
+
+  useEffect(() => {
+    setSavedCount(getSavedTasks().length);
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.count === "number") {
+        setSavedCount(detail.count);
+      } else {
+        setSavedCount(getSavedTasks().length);
+      }
+    };
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    return () => window.removeEventListener("gig_tasks_updated", handleUpdate);
+  }, []);
 
   return (
     <header
@@ -141,7 +158,27 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             textDecoration: "none",
           }}
         >
-          + Post a Task
+          Tasks Backlog
+          {savedCount > 0 && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 20,
+                height: 20,
+                padding: "0 6px",
+                borderRadius: 9999,
+                backgroundColor: isActive(activeTab, "tasks-backlog") ? "#ffffff" : MINT,
+                color: isActive(activeTab, "tasks-backlog") ? GREEN : "#ffffff",
+                fontSize: 11,
+                fontWeight: 800,
+                marginLeft: 6,
+              }}
+            >
+              {savedCount}
+            </span>
+          )}
         </Link>
         <Link
           href="/dashboard/business?tab=profile"

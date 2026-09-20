@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { cleanGithubHandle } from "@/lib/db-operations";
+import { getSavedTasks } from "@/lib/saved-tasks";
 
 const BORDER = "#e4e4e7";
 const CHARCOAL = "#151b1d";
-const MUTED = "#71717b";
 const MINT = "#00c950";
 const MINT_SOFT = "rgba(0, 201, 80, 0.10)";
 const MINT_BDR = "rgba(0, 201, 80, 0.20)";
@@ -52,6 +53,21 @@ function isActive(activeTab: string, tab: string): boolean {
 
 export default function DevHeader({ displayName, handle, activeTab, githubHandle }: DevHeaderProps) {
   const cleanHandle = cleanGithubHandle(githubHandle);
+  const [savedCount, setSavedCount] = useState<number>(0);
+
+  useEffect(() => {
+    setSavedCount(getSavedTasks().length);
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.count === "number") {
+        setSavedCount(detail.count);
+      } else {
+        setSavedCount(getSavedTasks().length);
+      }
+    };
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    return () => window.removeEventListener("gig_tasks_updated", handleUpdate);
+  }, []);
 
   return (
     <header style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -114,6 +130,64 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
             </a>
           )}
           <Link
+            href="/dashboard/developer?tab=tasks"
+            className="inline-flex items-center justify-center gap-2"
+            style={{
+              height: 44,
+              padding: "0 20px",
+              borderRadius: 6,
+              backgroundColor: isActive(activeTab, "tasks") ? MINT : "transparent",
+              border: `1.5px solid ${isActive(activeTab, "tasks") ? MINT : CHARCOAL}`,
+              color: isActive(activeTab, "tasks") ? MINT_FG : CHARCOAL,
+              fontWeight: 700,
+              fontSize: 14,
+              whiteSpace: "nowrap",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+            }}
+          >
+            Tasks
+            {savedCount > 0 && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 20,
+                  height: 20,
+                  padding: "0 6px",
+                  borderRadius: 9999,
+                  backgroundColor: isActive(activeTab, "tasks") ? "#ffffff" : MINT,
+                  color: isActive(activeTab, "tasks") ? GREEN : "#ffffff",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  marginLeft: 4,
+                }}
+              >
+                {savedCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/dashboard/developer?tab=issues"
+            className="inline-flex items-center justify-center gap-2"
+            style={{
+              height: 44,
+              padding: "0 18px",
+              borderRadius: 6,
+              backgroundColor: isActive(activeTab, "issues") ? MINT : "transparent",
+              border: `1.5px solid ${isActive(activeTab, "issues") ? MINT : CHARCOAL}`,
+              color: isActive(activeTab, "issues") ? MINT_FG : CHARCOAL,
+              fontWeight: 600,
+              fontSize: 14,
+              whiteSpace: "nowrap",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+            }}
+          >
+            Issue Pool
+          </Link>
+          <Link
             href="/dashboard/developer?tab=profile"
             className="inline-flex items-center justify-center gap-2"
             style={{
@@ -154,29 +228,6 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
               <line x1="2" y1="10" x2="22" y2="10" />
             </svg>
             UPI Disbursals
-          </Link>
-          <Link
-            href="/dashboard/developer?tab=tasks"
-            className="inline-flex items-center justify-center gap-2"
-            style={{
-              height: 44,
-              padding: "0 20px",
-              borderRadius: 6,
-              backgroundColor: isActive(activeTab, "tasks") ? MINT : "transparent",
-              border: `1.5px solid ${isActive(activeTab, "tasks") ? MINT : CHARCOAL}`,
-              color: isActive(activeTab, "tasks") ? MINT_FG : CHARCOAL,
-              fontWeight: 700,
-              fontSize: 14,
-              whiteSpace: "nowrap",
-              letterSpacing: "0.01em",
-              textDecoration: "none",
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            Claim Issue
           </Link>
         </div>
       </div>
