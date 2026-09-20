@@ -290,23 +290,111 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
 
       {/* Wallet Widget & Footer */}
       <div style={{ padding: 12, borderTop: "1px solid #e4e4e7", backgroundColor: "#ffffff" }}>
-        {walletVal && (
-          <Link href={`${base}?tab=${isBusiness ? "billing" : "wallet"}`} className="block transition-all hover:border-emerald-500" style={{ backgroundColor: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: 10, padding: "12px 14px", textDecoration: "none" }}>
-            <span className="block" style={{ color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase" }}>{s.walletLabel?.toUpperCase()}</span>
-            <span className="block mt-1" style={{ color: "#257b5a", fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>{walletVal}</span>
-            {s.walletSubtext && <span className="block mt-1" style={{ color: "#71717b", fontSize: 11, lineHeight: 1.3 }}>{s.walletSubtext}</span>}
-          </Link>
-        )}
-        <Link href={`${base}?tab=${isBusiness ? "issue-pool" : "issues"}`} className="mt-2 w-full flex items-center justify-center gap-2 transition-opacity hover:opacity-90" style={{ height: 42, backgroundColor: "#00c950", color: "#ffffff", fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", borderRadius: 6, textDecoration: "none" }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+        {/* Unified Wallet Card with Integrated Logout Button */}
+        <div
+          style={{
+            position: "relative",
+            backgroundColor: "#f9fafb",
+            border: "1px solid #e4e4e7",
+            borderRadius: 12,
+            padding: "12px 14px",
+            background: "linear-gradient(180deg, #ffffff 0%, #f4faf6 100%)",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+          }}
+        >
+          {/* Card Header: Label & Integrated Logout Button */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span
+              style={{
+                color: "#71717b",
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: "#257b5a" }}>
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                <line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+              {s.walletLabel?.toUpperCase() || "GIG WALLET"}
+            </span>
+
+            {/* Logout Button inside Wallet Card */}
+            <form action={logoutAction} style={{ margin: 0, padding: 0 }}>
+              <button
+                type="submit"
+                aria-label="Sign Out"
+                title="Sign Out"
+                className="transition-colors hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #e4e4e7",
+                  color: "#71717b",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Logout</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Wallet Balance Link */}
+          {walletVal && (
+            <Link
+              href={`${base}?tab=${isBusiness ? "billing" : "wallet"}`}
+              style={{ textDecoration: "none", display: "block" }}
+            >
+              <div style={{ color: "#257b5a", fontSize: 20, fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em" }}>
+                {walletVal}
+              </div>
+              {s.walletSubtext && (
+                <div style={{ color: "#71717b", fontSize: 11, fontWeight: 500, marginTop: 4, display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: 9999, backgroundColor: "#00c950", flexShrink: 0 }} />
+                  <span>{s.walletSubtext}</span>
+                </div>
+              )}
+            </Link>
+          )}
+        </div>
+
+        {/* Primary Action Button */}
+        <Link
+          href={`${base}?tab=${isBusiness ? "issue-pool" : "issues"}`}
+          className="mt-2.5 w-full flex items-center justify-center gap-2 transition-all hover:brightness-105 active:scale-[0.99]"
+          style={{
+            height: 42,
+            backgroundColor: "#00c950",
+            color: "#ffffff",
+            fontWeight: 800,
+            fontSize: "0.875rem",
+            letterSpacing: "0.03em",
+            borderRadius: 8,
+            textDecoration: "none",
+            boxShadow: "0 4px 12px rgba(0, 201, 80, 0.20)",
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
           <span>{isBusiness ? "POST TASK" : "CLAIM ISSUE"}</span>
         </Link>
-        <form action={logoutAction} className="mt-2" style={{ borderTop: "1px solid #f4f4f5", paddingTop: 10 }}>
-          <button type="submit" aria-label="Sign Out" className="w-full flex items-center justify-center gap-2 py-1 text-xs font-semibold cursor-pointer transition-colors hover:text-zinc-900" style={{ color: "#71717b" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-            <span>Sign Out</span>
-          </button>
-        </form>
       </div>
     </aside>
   );
