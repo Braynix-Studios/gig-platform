@@ -17,7 +17,7 @@ const GREEN = "#257b5a";
 interface DevHeaderProps {
   displayName: string;
   handle: string;
-  activeTab: "tasks" | "issues" | "prs" | "wallet" | "profile";
+  activeTab: "dashboard" | "tasks" | "issues" | "prs" | "wallet" | "profile";
   githubHandle?: string | null;
 }
 
@@ -130,6 +130,25 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
               Connect GitHub
             </a>
           )}
+          <Link
+            href="/dashboard/developer?tab=dashboard"
+            className="inline-flex items-center justify-center gap-2"
+            style={{
+              height: 44,
+              padding: "0 18px",
+              borderRadius: 6,
+              backgroundColor: isActive(activeTab, "dashboard") ? MINT : "transparent",
+              border: `1.5px solid ${isActive(activeTab, "dashboard") ? MINT : CHARCOAL}`,
+              color: isActive(activeTab, "dashboard") ? MINT_FG : CHARCOAL,
+              fontWeight: 700,
+              fontSize: 14,
+              whiteSpace: "nowrap",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+            }}
+          >
+            Dashboard
+          </Link>
           <Link
             href="/dashboard/developer?tab=tasks"
             className="inline-flex items-center justify-center gap-2"

@@ -12,6 +12,7 @@ import Card from "@/components/dashboard/Card";
 import IssuePool from "@/components/dashboard/IssuePool";
 import SubmissionsReviewPanel from "@/components/dashboard/SubmissionsReviewPanel";
 import GitHubImportModal from "@/components/dashboard/GitHubImportModal";
+import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import { type SubmissionReview, cleanGithubHandle } from "@/lib/db-operations";
 import { getSavedTasks } from "@/lib/saved-tasks";
@@ -60,7 +61,7 @@ const xIcon = (
   </svg>
 );
 
-type BizTab = "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
+type BizTab = "dashboard" | "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
 
 export interface BizMetric {
   label: string;
@@ -553,6 +554,34 @@ function TabContent({
   const { metrics, backlogTasks, talentPool, disbursals } = data;
 
   switch (activeTab) {
+    case "dashboard":
+      return (
+        <ActivityFeed
+          role="business"
+          savedTasks={getSavedTasks()}
+          claimedTasks={backlogTasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            repo: t.repo,
+            status: "Locked",
+            assignee: t.assignee || "Unassigned",
+            lockedAmount: t.budget || "—",
+            lockExpiry: "48h",
+          }))}
+          verifiedPRs={[]}
+          transactions={disbursals.map((d) => ({
+            id: d.id,
+            date: d.date,
+            description: d.recipient,
+            amount: d.amount,
+            type: "debit",
+            status: "Completed",
+          }))}
+          githubHandle={profileState.githubHandle}
+          displayName={profileState.company || profileState.displayName}
+        />
+      );
+
     case "issue-pool":
       return (
         <IssuePool
@@ -1386,7 +1415,7 @@ export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews 
   const searchParams = useSearchParams();
   const activeTab: BizTab = (() => {
     const tab = searchParams?.get("tab") as BizTab;
-    return tab && ["tasks-backlog", "issue-pool", "talent-pool", "workspace", "billing", "profile"].includes(tab) ? tab : "tasks-backlog";
+    return tab && ["dashboard", "tasks-backlog", "issue-pool", "talent-pool", "workspace", "billing", "profile"].includes(tab) ? tab : "dashboard";
   })();
 
   // Company profile state

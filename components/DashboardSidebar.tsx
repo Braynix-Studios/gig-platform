@@ -34,6 +34,15 @@ export interface DashboardSidebarProps {
   stats?: DashboardStats;
 }
 
+const dashboardIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="7" height="9" rx="1" />
+    <rect x="14" y="3" width="7" height="5" rx="1" />
+    <rect x="14" y="12" width="7" height="9" rx="1" />
+    <rect x="3" y="16" width="7" height="5" rx="1" />
+  </svg>
+);
+
 const tasksIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <polyline points="9 11 12 14 22 4" />
@@ -54,7 +63,7 @@ const talentIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
     <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M23 21v-2a4 4 0 0 1 0 7.75" />
     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
   </svg>
 );
@@ -98,7 +107,7 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
     role || (pathname.startsWith("/dashboard/business") ? "business" : "developer");
   const isBusiness = detectedRole === "business";
   const base = isBusiness ? "/dashboard/business" : "/dashboard/developer";
-  const currentTab = searchParams?.get("tab") || (isBusiness ? "tasks-backlog" : "tasks");
+  const currentTab = searchParams?.get("tab") || "dashboard";
 
   const defaults = getSidebarStatsSync(isBusiness ? "business" : "developer");
   const s: DashboardStats = {
@@ -141,6 +150,13 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
 
   const isLinkActive = (itemTab: string) => currentTab === itemTab;
 
+  const overviewItem = {
+    label: "Dashboard",
+    tab: "dashboard",
+    icon: dashboardIcon,
+    badge: "LIVE",
+  };
+
   const workItems = isBusiness
     ? [
         { label: "Issue Pool", tab: "issue-pool", icon: layersIcon, count: s.counts?.["Issue Pool"] ?? "0" },
@@ -154,40 +170,61 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
 
   const accountItems = isBusiness
     ? [
+        { label: "Tasks Backlog", tab: "tasks-backlog", icon: tasksIcon, count: (s.tasksCount !== undefined ? String(s.tasksCount) : undefined) ?? s.counts?.["Tasks Backlog"] ?? "8" },
         { label: "Billing/Escrow", tab: "billing", icon: walletIcon },
         { label: "Profile", tab: "profile", icon: profileIcon },
       ]
     : [
+        { label: "Tasks", tab: "tasks", icon: tasksIcon, count: (s.tasksCount !== undefined ? String(s.tasksCount) : undefined) ?? s.counts?.["Tasks"] ?? "2" },
         { label: "Wallet", tab: "wallet", icon: walletIcon },
         { label: "Profile", tab: "profile", icon: profileIcon },
       ];
 
-  const renderRow = (item: { label: string; tab: string; icon: React.ReactNode; count?: string }) => {
+  const renderRow = (item: { label: string; tab: string; icon: React.ReactNode; count?: string; badge?: string }) => {
     const active = isLinkActive(item.tab);
     return (
       <Link
         key={item.label}
         href={`${base}?tab=${item.tab}`}
         aria-current={active ? "page" : undefined}
-        className="flex items-center justify-between transition-colors"
+        className="flex items-center justify-between transition-all"
         style={{
-          borderRadius: 4,
-          padding: "10px 8px",
-          backgroundColor: active ? "rgba(0, 201, 80, 0.10)" : "transparent",
-          color: active ? "#257b5a" : "#09090b",
-          fontWeight: active ? 600 : 500,
+          borderRadius: 6,
+          padding: "9px 10px",
+          backgroundColor: active ? "rgba(0, 201, 80, 0.12)" : "transparent",
+          color: active ? "#1b6348" : "#27272a",
+          fontWeight: active ? 700 : 500,
           fontSize: "0.875rem",
+          borderLeft: active ? "3px solid #00c950" : "3px solid transparent",
         }}
       >
         <span className="flex items-center gap-3">
           <span style={{ color: active ? "#257b5a" : "#71717b" }}>{item.icon}</span>
           <span>{item.label}</span>
         </span>
-        {item.count !== undefined && (
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, backgroundColor: "#f4f4f5", border: "1px solid #e4e4e7", color: "#09090b" }}>
+        {item.badge ? (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              padding: "2px 7px",
+              borderRadius: 9999,
+              backgroundColor: active ? "rgba(0, 201, 80, 0.20)" : "rgba(0, 201, 80, 0.10)",
+              color: "#257b5a",
+              border: "1px solid rgba(0, 201, 80, 0.25)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: 9999, backgroundColor: "#00c950" }} />
+            {item.badge}
+          </span>
+        ) : item.count !== undefined ? (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, backgroundColor: active ? "#ffffff" : "#f4f4f5", border: "1px solid #e4e4e7", color: "#09090b" }}>
             {item.count}
           </span>
-        )}
+        ) : null}
       </Link>
     );
   };
@@ -196,66 +233,77 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
     <aside
       aria-label="Dashboard Sidebar"
       className="hidden md:flex flex-col shrink-0 sticky top-0 h-dvh select-none"
-      style={{ width: 248, backgroundColor: "#f6f8f7", borderRight: "1px solid #e4e4e7" }}
+      style={{ width: 252, backgroundColor: "#f8faf9", borderRight: "1px solid #e4e4e7" }}
     >
-      <div style={{ padding: 16, borderBottom: "1px solid #e4e4e7" }}>
+      {/* Workspace Header */}
+      <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid #e4e4e7" }}>
         <div className="flex items-center justify-between">
-          <Link href="/" aria-label="GIG Home" style={{ color: "#00c950", fontSize: "1.875rem", fontWeight: 900, letterSpacing: "-0.08em", lineHeight: 1 }}>
+          <Link href="/" aria-label="GIG Home" style={{ color: "#00c950", fontSize: "1.875rem", fontWeight: 900, letterSpacing: "-0.08em", lineHeight: 1, textDecoration: "none" }}>
             gig
           </Link>
-          <span className="pill-badge inline-flex items-center gap-1.5" style={{ color: "#6048a8", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em" }}>
-            <span style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "#6048a8", flexShrink: 0 }} aria-hidden="true" />
+          <span className="pill-badge inline-flex items-center gap-1.5" style={{ color: "#257b5a", backgroundColor: "rgba(0, 201, 80, 0.10)", border: "1px solid rgba(0, 201, 80, 0.20)", padding: "3px 10px", borderRadius: 9999, fontSize: 10, fontWeight: 800, letterSpacing: "0.12em" }}>
+            <span style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "#00c950", flexShrink: 0 }} aria-hidden="true" />
             {isBusiness ? "BUSINESS" : "DEVELOPER"}
           </span>
         </div>
-        <div style={{ marginTop: 16, color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase" }}>
+        <div style={{ marginTop: 14, color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase" }}>
           {isBusiness ? "SPONSOR WORKSPACE" : "CONTRIBUTION WORKSPACE"}
         </div>
-        <div style={{ marginTop: 4, fontSize: "0.875rem", color: "#09090b", lineHeight: 1.25 }}>
+        <div style={{ marginTop: 2, fontSize: "0.8125rem", color: "#3f3f46", fontWeight: 500 }}>
           {isBusiness ? "Fund, review, and ship" : "Find, build, and earn"}
         </div>
       </div>
 
-      <div id="profile" style={{ padding: 16, borderTop: "1px solid #e4e4e7", borderBottom: "1px solid #e4e4e7" }}>
+      {/* User Profile Card */}
+      <div id="profile" style={{ padding: "14px 16px", borderBottom: "1px solid #e4e4e7", backgroundColor: "#ffffff" }}>
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center shrink-0" style={{ width: 40, height: 40, backgroundColor: "#eee8ff", border: "1px solid #c8b8f1", borderRadius: 4, color: "#6048a8", fontSize: 14, fontWeight: 700 }} aria-hidden="true">
+          <div className="flex items-center justify-center shrink-0" style={{ width: 38, height: 38, backgroundColor: "rgba(0, 201, 80, 0.10)", border: "1px solid rgba(0, 201, 80, 0.25)", borderRadius: 8, color: "#257b5a", fontSize: 13, fontWeight: 800 }} aria-hidden="true">
             {initials}
           </div>
-          <div className="min-w-0">
-            <p className="truncate" style={{ fontSize: "0.875rem", fontWeight: 600, color: "#09090b", lineHeight: 1.25 }}>{displayName}</p>
-            <p className="truncate" style={{ fontSize: 12, color: "#71717b", marginTop: 2, lineHeight: 1.25 }}>{displayEmail}</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate" style={{ fontSize: "0.875rem", fontWeight: 700, color: "#09090b", lineHeight: 1.2 }}>{displayName}</p>
+            <p className="truncate" style={{ fontSize: 12, color: "#71717b", marginTop: 2, lineHeight: 1.2 }}>{displayEmail}</p>
           </div>
         </div>
         {!isBusiness && reputationVal && (
-          <div className="inline-flex items-center gap-1.5" style={{ marginTop: 12, backgroundColor: "rgba(0, 201, 80, 0.10)", border: "1px solid rgba(0, 201, 80, 0.20)", color: "#257b5a", fontSize: 11, fontWeight: 700, borderRadius: 9999, padding: "4px 12px" }} title={`Reputation ${reputationVal}${s.reputationBadge ? ` · ${s.reputationBadge}` : ""}`}>
+          <div className="inline-flex items-center gap-1.5" style={{ marginTop: 10, backgroundColor: "rgba(0, 201, 80, 0.10)", border: "1px solid rgba(0, 201, 80, 0.20)", color: "#257b5a", fontSize: 11, fontWeight: 700, borderRadius: 9999, padding: "3px 10px" }} title={`Reputation ${reputationVal}${s.reputationBadge ? ` · ${s.reputationBadge}` : ""}`}>
             <span aria-hidden="true">★</span>
             <span>{reputationVal}{s.reputationBadge ? ` · ${s.reputationBadge}` : ""}</span>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto" style={{ padding: 8, borderTop: "1px solid #e4e4e7" }} aria-label="Workspace Navigation">
-        <div style={{ color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", padding: "0 8px 6px 8px" }}>WORK</div>
-        <div className="space-y-1">{workItems.map(renderRow)}</div>
-        <div style={{ color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", padding: "16px 8px 6px 8px" }}>ACCOUNT</div>
+      {/* Navigation Sections */}
+      <nav className="flex-1 min-h-0 overflow-y-auto" style={{ padding: 10 }} aria-label="Workspace Navigation">
+        {/* OVERVIEW SECTION (TOP) */}
+        <div style={{ color: "#71717b", fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", padding: "4px 8px 6px 8px" }}>OVERVIEW</div>
+        <div className="space-y-1 mb-4">{renderRow(overviewItem)}</div>
+
+        {/* WORK SECTION */}
+        <div style={{ color: "#71717b", fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", padding: "4px 8px 6px 8px" }}>WORK</div>
+        <div className="space-y-1 mb-4">{workItems.map(renderRow)}</div>
+
+        {/* ACCOUNT SECTION */}
+        <div style={{ color: "#71717b", fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", padding: "4px 8px 6px 8px" }}>ACCOUNT</div>
         <div className="space-y-1">{accountItems.map(renderRow)}</div>
       </nav>
 
-      <div style={{ padding: 8, borderTop: "1px solid #e4e4e7" }}>
+      {/* Wallet Widget & Footer */}
+      <div style={{ padding: 12, borderTop: "1px solid #e4e4e7", backgroundColor: "#ffffff" }}>
         {walletVal && (
-          <Link href={`${base}?tab=${isBusiness ? "billing" : "wallet"}`} className="block transition-shadow hover:shadow-xs" style={{ backgroundColor: "#ffffff", border: "1px solid #e4e4e7", borderRadius: 12, padding: 16 }}>
+          <Link href={`${base}?tab=${isBusiness ? "billing" : "wallet"}`} className="block transition-all hover:border-emerald-500" style={{ backgroundColor: "#f9fafb", border: "1px solid #e4e4e7", borderRadius: 10, padding: "12px 14px", textDecoration: "none" }}>
             <span className="block" style={{ color: "#71717b", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase" }}>{s.walletLabel?.toUpperCase()}</span>
-            <span className="block mt-1" style={{ color: "#257b5a", fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{walletVal}</span>
+            <span className="block mt-1" style={{ color: "#257b5a", fontSize: 18, fontWeight: 800, lineHeight: 1.2 }}>{walletVal}</span>
             {s.walletSubtext && <span className="block mt-1" style={{ color: "#71717b", fontSize: 11, lineHeight: 1.3 }}>{s.walletSubtext}</span>}
           </Link>
         )}
-        <Link href={`${base}?tab=${isBusiness ? "tasks-backlog" : "issues"}`} className="mt-2 w-full flex items-center justify-center gap-2 transition-opacity hover:opacity-90" style={{ height: 44, backgroundColor: "#00c950", color: "#f0fdf4", fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", borderRadius: 4 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+        <Link href={`${base}?tab=${isBusiness ? "issue-pool" : "issues"}`} className="mt-2 w-full flex items-center justify-center gap-2 transition-opacity hover:opacity-90" style={{ height: 42, backgroundColor: "#00c950", color: "#ffffff", fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", borderRadius: 6, textDecoration: "none" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <span>{isBusiness ? "POST TASK" : "CLAIM ISSUE"}</span>
         </Link>
-        <form action={logoutAction} className="mt-2" style={{ borderTop: "1px solid #e4e4e7", paddingTop: 12 }}>
-          <button type="submit" aria-label="Sign Out" className="w-full flex items-center justify-center gap-2 py-1 text-sm font-medium cursor-pointer transition-colors hover:text-zinc-900" style={{ color: "#71717b" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+        <form action={logoutAction} className="mt-2" style={{ borderTop: "1px solid #f4f4f5", paddingTop: 10 }}>
+          <button type="submit" aria-label="Sign Out" className="w-full flex items-center justify-center gap-2 py-1 text-xs font-semibold cursor-pointer transition-colors hover:text-zinc-900" style={{ color: "#71717b" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
             <span>Sign Out</span>
           </button>
         </form>

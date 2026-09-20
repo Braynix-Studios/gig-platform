@@ -8,6 +8,7 @@ import MetricCard from "@/components/dashboard/MetricCard";
 import TaskTable from "@/components/dashboard/TaskTable";
 import ProofOfWorkCard from "@/components/dashboard/ProofOfWorkCard";
 import IssuePool from "@/components/dashboard/IssuePool";
+import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import { cleanGithubHandle } from "@/lib/db-operations";
 import { getSavedTasks } from "@/lib/saved-tasks";
@@ -27,7 +28,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-type DevTab = "tasks" | "issues" | "prs" | "wallet" | "profile";
+type DevTab = "dashboard" | "tasks" | "issues" | "prs" | "wallet" | "profile";
 
 export interface DevTask {
   id: string;
@@ -681,6 +682,19 @@ function TabContent({
     .toUpperCase();
 
   switch (activeTab) {
+    case "dashboard":
+      return (
+        <ActivityFeed
+          role="developer"
+          savedTasks={getSavedTasks()}
+          claimedTasks={tasks}
+          verifiedPRs={verifiedPRs}
+          transactions={transactions}
+          githubHandle={profileState.github_handle || data.githubHandle}
+          displayName={profileState.username || data.displayName}
+        />
+      );
+
     case "issues":
       return <IssuePool data={issuePool ?? createEmptyIssuePool("developer")} role="developer" />;
 
@@ -1519,7 +1533,7 @@ export default function DeveloperDashboard({ data = FALLBACK, issuePool }: DevDa
   const searchParams = useSearchParams();
   const activeTab: DevTab = (() => {
     const tab = searchParams?.get("tab") as DevTab;
-    return tab && ["tasks", "issues", "prs", "wallet", "profile"].includes(tab) ? tab : "tasks";
+    return tab && ["dashboard", "tasks", "issues", "prs", "wallet", "profile"].includes(tab) ? tab : "dashboard";
   })();
 
   const [walletData, setWalletData] = useState<{ balance: string; transactions: DevTransaction[] } | null>(null);

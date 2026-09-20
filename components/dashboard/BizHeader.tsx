@@ -15,7 +15,7 @@ const GREEN = "#257b5a";
 interface BizHeaderProps {
   displayName: string;
   displayEmail: string;
-  activeTab: "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
+  activeTab: "dashboard" | "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
   githubHandle?: string | null;
 }
 
@@ -139,6 +139,26 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             Connect GitHub
           </a>
         )}
+        <Link
+          href="/dashboard/business?tab=dashboard"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 18px",
+            borderRadius: 6,
+            backgroundColor: isActive(activeTab, "dashboard") ? MINT : "transparent",
+            color: isActive(activeTab, "dashboard") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "dashboard") ? MINT : "rgba(255,255,255,0.25)"}`,
+            fontWeight: 700,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Dashboard
+        </Link>
         <Link
           href="/dashboard/business?tab=tasks-backlog"
           style={{
