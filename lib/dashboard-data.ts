@@ -18,6 +18,7 @@ import {
   getRepositories,
   getPendingSubmissionsForCompany,
   countActiveClaimsForTasks,
+  cleanGithubHandle,
 } from '@/lib/db-operations';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -216,8 +217,9 @@ export async function getDeveloperDashboard(userId: string) {
   const user = profile?.user ?? null;
   const wallet = profile?.wallet ?? null;
   const walletBalance = wallet?.available_balance ?? 0;
-  const displayName = user?.github_handle || user?.username || user?.email?.split('@')[0] || 'Developer';
-  const githubHandle = user?.github_handle || user?.github_id || null;
+  const cleanHandle = cleanGithubHandle(user?.github_handle);
+  const displayName = cleanHandle || user?.username || user?.email?.split('@')[0] || 'Developer';
+  const githubHandle = cleanHandle;
 
   const stats = profile?.user
     ? {
@@ -330,6 +332,10 @@ export interface BusinessDashboard {
   displayName: string;
   displayEmail: string;
   githubHandle?: string | null;
+  company?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  avatar_url?: string | null;
   metrics: WorkspaceMetric[];
   backlogTasks: BacklogTask[];
   talentPool: TalentContributor[];
@@ -346,6 +352,12 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
 
   let githubHandle: string | null = null;
   let openTasks: Task[] = [];
+  let displayName = 'Enterprise Sponsor';
+  let displayEmail = 'biz@gig.dev';
+  let company: string | null = null;
+  let bio: string | null = null;
+  let location: string | null = null;
+  let avatar_url: string | null = null;
 
   if (client) {
     try {
@@ -356,7 +368,25 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
       ]);
       const user = userRes.data?.user;
       if (user) {
-        githubHandle = user.user_metadata?.github_handle || user.user_metadata?.github_id || null;
+        githubHandle = cleanGithubHandle(user.user_metadata?.github_handle || user.user_metadata?.user_name);
+        if (user.email) displayEmail = user.email;
+
+        // Fetch user profile row
+        const { data: userRow } = await client
+          .from("users")
+          .select("username, company, bio, location, avatar_url, github_handle")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (userRow) {
+          if (userRow.username) displayName = userRow.username;
+          company = userRow.company || null;
+          bio = userRow.bio || null;
+          location = userRow.location || null;
+          avatar_url = userRow.avatar_url || null;
+          const rowHandle = cleanGithubHandle(userRow.github_handle);
+          if (rowHandle) githubHandle = rowHandle;
+        }
       }
       openTasks = tasks;
     } catch {
@@ -378,13 +408,14 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
         }))
       : [];
 
-  const displayName = 'Enterprise Sponsor';
-  const displayEmail = 'biz@gig.dev';
-
   return {
     displayName,
     displayEmail,
     githubHandle,
+    company,
+    bio,
+    location,
+    avatar_url,
     metrics: getWorkspaceMetrics(),
     backlogTasks,
     talentPool: getTalentPool(),

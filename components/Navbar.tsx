@@ -48,13 +48,6 @@ export default function Navbar() {
 
         <div className="nav-actions">
           <Link
-            href="/profile"
-            className={`btn btn-nav-outline${pathname === "/profile" ? " is-active" : ""}`}
-            style={{ marginRight: 8 }}
-          >
-            Profile
-          </Link>
-          <Link
             href="/auth"
             className={`btn btn-nav-outline${onAuth ? " is-active" : ""}`}
             aria-current={onAuth ? "page" : undefined}

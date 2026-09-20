@@ -111,14 +111,21 @@ export interface Profile {
 export interface UpsertUserInput {
   id?: string;
   github_id?: string | null;
+  github_handle?: string | null;
   username?: string;
   email?: string;
   avatar_url?: string | null;
+  bio?: string | null;
+  company?: string | null;
+  location?: string | null;
+  followers_count?: number | null;
+  public_repos_count?: number | null;
   role?: string;
 }
 
 export interface GitHubProfileData {
   login: string;
+  id?: number;
   name?: string | null;
   avatar_url?: string | null;
   bio?: string | null;
@@ -478,33 +485,63 @@ export async function getUserById(
   return data;
 }
 
+export function cleanGithubHandle(handle?: string | null): string | null {
+  if (!handle) return null;
+  const trimmed = String(handle).trim().replace(/^@+/, "");
+  if (!trimmed) return null;
+  // If numeric-only, it's an internal GitHub numeric ID (e.g. "12345678"), not a username
+  if (/^\d+$/.test(trimmed)) return null;
+  // Common placeholders or fallbacks to reject
+  if (
+    trimmed.toLowerCase() === "user" ||
+    trimmed.toLowerCase() === "none" ||
+    trimmed.toLowerCase() === "null" ||
+    trimmed.toLowerCase() === "undefined"
+  ) {
+    return null;
+  }
+  // Standard GitHub username validation: 1-39 chars, alphanumeric or single hyphens, no trailing/leading hyphen
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 export async function upsertUser(
   user: UpsertUserInput,
   clientOverride?: SupabaseClient | null,
 ): Promise<UserProfile | null> {
   const client = clientOverride ?? db();
   if (!client) return null;
+
+  const payload: Record<string, unknown> = {
+    // Write the owning auth.users id so first-time OAuth users can INSERT
+    // their own row (users.id is NOT NULL and RLS requires auth.uid() = id).
+    ...(user.id ? { id: user.id } : {}),
+    username: user.username ?? "",
+    email: user.email ?? "",
+  };
+
+  if (user.github_id !== undefined) payload.github_id = user.github_id;
+  if (user.github_handle !== undefined) payload.github_handle = cleanGithubHandle(user.github_handle);
+  if (user.avatar_url !== undefined) payload.avatar_url = user.avatar_url;
+  if (user.bio !== undefined) payload.bio = user.bio;
+  if (user.company !== undefined) payload.company = user.company;
+  if (user.location !== undefined) payload.location = user.location;
+  if (user.followers_count !== undefined) payload.followers_count = user.followers_count;
+  if (user.public_repos_count !== undefined) payload.public_repos_count = user.public_repos_count;
+  // role is only written when explicitly provided: the `authenticated`
+  // role has INSERT/UPDATE on `role` revoked (migration 0002), so
+  // user-scoped callers must never send it. Server-side flows using
+  // the service role pass it explicitly.
+  if (user.role !== undefined) payload.role = user.role;
+
   const { data, error } = await client
     .from("users")
-    .upsert(
-      {
-        // Write the owning auth.users id so first-time OAuth users can INSERT
-        // their own row (users.id is NOT NULL and RLS requires auth.uid() = id).
-        ...(user.id ? { id: user.id } : {}),
-        github_id: user.github_id ?? null,
-        username: user.username ?? "",
-        email: user.email ?? "",
-        avatar_url: user.avatar_url ?? null,
-        // role is only written when explicitly provided: the `authenticated`
-        // role has INSERT/UPDATE on `role` revoked (migration 0002), so
-        // user-scoped callers must never send it. Server-side flows using
-        // the service role pass it explicitly.
-        ...(user.role !== undefined ? { role: user.role } : {}),
-      },
-      { onConflict: "id", ignoreDuplicates: false },
-    )
+    .upsert(payload, { onConflict: "id", ignoreDuplicates: false })
     .select()
     .maybeSingle();
+
   if (error) {
     console.error("[upsertUser] Supabase error:", error.message, error.details, error.hint);
     return null;
@@ -514,7 +551,7 @@ export async function upsertUser(
 
 export async function syncGithubProfile(
   userId: string,
-  providerToken: string,
+  providerToken?: string | null,
   githubId?: string | null,
   githubHandle?: string | null,
   clientOverride?: SupabaseClient | null,
@@ -522,38 +559,88 @@ export async function syncGithubProfile(
   const client = clientOverride ?? db();
   if (!client) return null;
 
-  const res = await fetch("https://api.github.com/user", {
-    headers: {
-      Authorization: `Bearer ${providerToken}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "gig-alpha",
-    },
-  });
+  let data: GitHubProfileData | null = null;
 
-  if (!res.ok) {
-    throw new Error(`GitHub API request failed (${res.status})`);
+  // 1. Authenticated fetch via OAuth provider token
+  if (providerToken) {
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${providerToken}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "gig-alpha",
+        },
+      });
+      if (res.ok) {
+        data = (await res.json()) as GitHubProfileData;
+      } else {
+        console.warn(`[syncGithubProfile] Token fetch returned status ${res.status}`);
+      }
+    } catch (err) {
+      console.warn("[syncGithubProfile] Token fetch failed:", err);
+    }
   }
 
-  const data = (await res.json()) as GitHubProfileData;
+  // 2. Fallback to public GitHub user endpoint if token fetch didn't succeed
+  const cleanHandle = cleanGithubHandle(githubHandle || data?.login);
+  if (!data && cleanHandle) {
+    try {
+      const res = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanHandle)}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "gig-alpha",
+        },
+      });
+      if (res.ok) {
+        data = (await res.json()) as GitHubProfileData;
+      } else {
+        console.warn(`[syncGithubProfile] Public user fetch returned status ${res.status}`);
+      }
+    } catch (err) {
+      console.warn("[syncGithubProfile] Public user fetch failed:", err);
+    }
+  }
+
+  const resolvedHandle = cleanGithubHandle(data?.login || cleanHandle);
+  const resolvedId = data?.id ? String(data.id) : (githubId ? String(githubId) : null);
+
+  const updatePayload: Record<string, unknown> = {
+    github_id: resolvedId,
+    github_handle: resolvedHandle,
+    github_updated_at: new Date().toISOString(),
+  };
+
+  if (data?.avatar_url) {
+    updatePayload.avatar_url = data.avatar_url;
+  }
+  if (data?.name || data?.login) {
+    updatePayload.username = data.name || data.login;
+  }
+  if (data?.bio !== undefined) {
+    updatePayload.bio = data.bio;
+  }
+  if (data?.company !== undefined) {
+    updatePayload.company = data.company;
+  }
+  if (data?.location !== undefined) {
+    updatePayload.location = data.location;
+  }
+  if (typeof data?.followers === "number") {
+    updatePayload.followers_count = data.followers;
+  }
+  if (typeof data?.public_repos === "number") {
+    updatePayload.public_repos_count = data.public_repos;
+  }
+
   const { data: profile, error } = await client
     .from("users")
-    .update({
-      github_id: githubId ?? data.login ?? null,
-      github_handle: githubHandle ?? data.login ?? null,
-      username: data.name ?? data.login ?? "",
-      avatar_url: data.avatar_url ?? null,
-      bio: data.bio ?? null,
-      company: data.company ?? null,
-      location: data.location ?? null,
-      followers_count: data.followers ?? 0,
-      public_repos_count: data.public_repos ?? 0,
-      github_updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", userId)
     .select()
     .maybeSingle();
 
   if (error) {
+    console.error(`[syncGithubProfile] Database write failed: ${error.message}`);
     throw new Error(`Could not write GitHub profile: ${error.message}`);
   }
   return profile;

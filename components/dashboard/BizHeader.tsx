@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { cleanGithubHandle } from "@/lib/db-operations";
 
 const CHARCOAL = "#151b1d";
 const MINT = "#00c950";
@@ -12,7 +13,7 @@ const GREEN = "#257b5a";
 interface BizHeaderProps {
   displayName: string;
   displayEmail: string;
-  activeTab: "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing";
+  activeTab: "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
   githubHandle?: string | null;
 }
 
@@ -21,6 +22,8 @@ function isActive(activeTab: string, tab: string): boolean {
 }
 
 export default function BizHeader({ displayName, displayEmail, activeTab, githubHandle }: BizHeaderProps) {
+  const cleanHandle = cleanGithubHandle(githubHandle);
+
   return (
     <header
       style={{
@@ -74,9 +77,9 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {githubHandle ? (
+        {cleanHandle ? (
           <a
-            href={`https://github.com/${githubHandle}`}
+            href={`https://github.com/${cleanHandle}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -95,7 +98,7 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4" /><path d="M12 22a10 9 0 1 0 0-18 10 9 0 0 0 0 18z" /></svg>
-            @{githubHandle}
+            @{cleanHandle}
           </a>
         ) : (
           <a
@@ -141,16 +144,16 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           + Post a Task
         </Link>
         <Link
-          href="/profile"
+          href="/dashboard/business?tab=profile"
           style={{
             display: "inline-flex",
             alignItems: "center",
             height: 42,
-            padding: "0 16px",
+            padding: "0 18px",
             borderRadius: 6,
-            backgroundColor: "transparent",
-            color: "#ffffff",
-            border: `1.5px solid rgba(255,255,255,0.25)`,
+            backgroundColor: isActive(activeTab, "profile") ? MINT : "transparent",
+            color: isActive(activeTab, "profile") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "profile") ? MINT : "rgba(255,255,255,0.25)"}`,
             fontWeight: 600,
             fontSize: 13,
             letterSpacing: "0.02em",
@@ -158,7 +161,7 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             textDecoration: "none",
           }}
         >
-          Profile
+          Company Profile
         </Link>
         <Link
           href="/dashboard/business?tab=billing"

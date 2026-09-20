@@ -155,7 +155,10 @@ export default function DashboardSidebar({ role, user, stats }: DashboardSidebar
       ];
 
   const accountItems = isBusiness
-    ? [{ label: "Billing/Escrow", tab: "billing", icon: walletIcon }]
+    ? [
+        { label: "Billing/Escrow", tab: "billing", icon: walletIcon },
+        { label: "Profile", tab: "profile", icon: profileIcon },
+      ]
     : [
         { label: "Wallet", tab: "wallet", icon: walletIcon },
         { label: "Profile", tab: "profile", icon: profileIcon },

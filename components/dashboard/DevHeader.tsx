@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { cleanGithubHandle } from "@/lib/db-operations";
 
 const BORDER = "#e4e4e7";
 const CHARCOAL = "#151b1d";
@@ -50,6 +51,8 @@ function isActive(activeTab: string, tab: string): boolean {
 }
 
 export default function DevHeader({ displayName, handle, activeTab, githubHandle }: DevHeaderProps) {
+  const cleanHandle = cleanGithubHandle(githubHandle);
+
   return (
     <header style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -59,9 +62,9 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          {githubHandle ? (
+          {cleanHandle ? (
             <a
-              href={`https://github.com/${githubHandle}`}
+              href={`https://github.com/${cleanHandle}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -83,7 +86,7 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4" /><path d="M12 22a10 9 0 1 0 0-18 10 9 0 0 0 0 18z" /></svg>
-              @{githubHandle}
+              @{cleanHandle}
             </a>
           ) : (
             <a
@@ -111,15 +114,15 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
             </a>
           )}
           <Link
-            href="/profile"
+            href="/dashboard/developer?tab=profile"
             className="inline-flex items-center justify-center gap-2"
             style={{
               height: 44,
-              padding: "0 16px",
+              padding: "0 18px",
               borderRadius: 6,
-              backgroundColor: "transparent",
-              border: `1.5px solid ${BORDER}`,
-              color: CHARCOAL,
+              backgroundColor: isActive(activeTab, "profile") ? MINT : "transparent",
+              border: `1.5px solid ${isActive(activeTab, "profile") ? MINT : CHARCOAL}`,
+              color: isActive(activeTab, "profile") ? MINT_FG : CHARCOAL,
               fontWeight: 600,
               fontSize: 14,
               whiteSpace: "nowrap",

@@ -9,6 +9,7 @@ import TaskTable from "@/components/dashboard/TaskTable";
 import ProofOfWorkCard from "@/components/dashboard/ProofOfWorkCard";
 import IssuePool from "@/components/dashboard/IssuePool";
 import type { IssuePoolData } from "@/lib/dashboard-data";
+import { cleanGithubHandle } from "@/lib/db-operations";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -84,6 +85,18 @@ export interface DeveloperDashboardData {
   walletTxCount: number;
   // Profile fields for editing
   username: string;
+  avatar_url: string | null;
+  github_handle: string | null;
+  bio: string | null;
+  company: string | null;
+  location: string | null;
+  followers_count: number | null;
+  public_repos_count: number | null;
+}
+
+export interface DeveloperProfileState {
+  username: string;
+  handle: string;
   avatar_url: string | null;
   github_handle: string | null;
   bio: string | null;
@@ -230,10 +243,15 @@ function TabContent({
   withdrawalError,
   withdrawalSuccess,
   handleWithdrawalSubmit,
+  profileState,
   isEditing,
   setIsEditing,
   formValues,
   setFormValues,
+  savingProfile,
+  profileSuccess,
+  profileError,
+  handleSaveProfile,
 }: {
   activeTab: DevTab;
   data: DeveloperDashboardData;
@@ -246,30 +264,15 @@ function TabContent({
   withdrawalError: string | null;
   withdrawalSuccess: boolean;
   handleWithdrawalSubmit: (event: FormEvent) => Promise<void>;
+  profileState: DeveloperProfileState;
   isEditing: boolean;
   setIsEditing: (editing: boolean) => void;
-  formValues: {
-    username: string;
-    handle: string;
-    avatar_url: string | null;
-    github_handle: string | null;
-    bio: string | null;
-    company: string | null;
-    location: string | null;
-    followers_count: number | null;
-    public_repos_count: number | null;
-  };
-  setFormValues: (value: React.SetStateAction<{
-    username: string;
-    handle: string;
-    avatar_url: string | null;
-    github_handle: string | null;
-    bio: string | null;
-    company: string | null;
-    location: string | null;
-    followers_count: number | null;
-    public_repos_count: number | null;
-  }>) => void;
+  formValues: DeveloperProfileState;
+  setFormValues: React.Dispatch<React.SetStateAction<DeveloperProfileState>>;
+  savingProfile: boolean;
+  profileSuccess: string | null;
+  profileError: string | null;
+  handleSaveProfile: () => Promise<void>;
 }) {
   const { stats, tasks, badges, verifiedPRs } = data;
   // Override stats.walletBalance with the fetched one
@@ -422,76 +425,86 @@ function TabContent({
         </section>
       );
 
-case "profile":
+    case "profile":
       return (
-        <section id="profile" style={{ marginTop: 40, scrollMarginTop: 24, display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
+        <section id="profile" style={{ marginTop: 40, scrollMarginTop: 24, display: "grid", gridTemplateColumns: "340px 1fr", gap: 20 }}>
           <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
             {/* Profile Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 64, height: 64, borderRadius: 8, backgroundColor: "#eee8ff", border: "1px solid #c8b8f1", color: "#6048a8", fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} aria-hidden="true">{initials}</div>
-              <div>
-                <p style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: CHARCOAL }}>{isEditing ? formValues.username || data.displayName : data.displayName}</p>
-                <p style={{ margin: "2px 0 0", fontSize: 13, color: MUTED, fontFamily: "monospace" }}>{isEditing ? formValues.handle || data.handle : data.handle}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              {profileState.avatar_url ? (
+                <img
+                  src={profileState.avatar_url}
+                  alt={profileState.username}
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 12,
+                    objectFit: "cover",
+                    border: "1px solid #c8b8f1",
+                    flexShrink: 0,
+                  }}
+                />
+              ) : (
+                <div style={{ width: 64, height: 64, borderRadius: 12, backgroundColor: "#eee8ff", border: "1px solid #c8b8f1", color: "#6048a8", fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} aria-hidden="true">
+                  {initials}
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: CHARCOAL }}>
+                  {isEditing ? formValues.username || profileState.username : profileState.username}
+                </p>
+                <p style={{ margin: "2px 0 0", fontSize: 13, color: MUTED, fontFamily: "monospace" }}>
+                  {isEditing ? formValues.handle || profileState.handle : profileState.handle}
+                </p>
               </div>
             </div>
-            
+
+            {/* Reputation Badge */}
+            <div style={{ backgroundColor: MINT_SOFT, border: `1px solid ${MINT_BDR}`, color: GREEN, fontSize: 13, fontWeight: 700, borderRadius: 9999, padding: "8px 16px", textAlign: "center" }}>
+              ★ {overriddenStats.reputationScore} · {overriddenStats.reputationBadge}
+            </div>
+
+            {/* Status alerts */}
+            {profileSuccess && (
+              <div style={{ padding: "10px 14px", backgroundColor: "rgba(0, 201, 80, 0.12)", border: "1px solid rgba(0, 201, 80, 0.25)", color: GREEN, borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                ✓ {profileSuccess}
+              </div>
+            )}
+            {profileError && (
+              <div style={{ padding: "10px 14px", backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: 8, fontSize: 13 }}>
+                {profileError}
+              </div>
+            )}
+
             {/* Edit Button / Save & Cancel Buttons */}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               {!isEditing ? (
-                <div style={{ display: "flex", gap: 10 }}>
-                  <Link
-                    href="/profile"
-                    style={{
-                      height: 36,
-                      padding: "0 16px",
-                      backgroundColor: "#ffffff",
-                      color: CHARCOAL,
-                      border: `1px solid ${BORDER}`,
-                      borderRadius: 6,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    Full Profile &rarr;
-                  </Link>
-                  <button
-                    onClick={() => {
-                      // Initialize form values with current data when entering edit mode
-                      setFormValues({
-                        username: data.username || data.displayName || "",
-                        handle: data.handle || "",
-                        avatar_url: data.avatar_url || null,
-                        github_handle: data.github_handle || null,
-                        bio: data.bio || null,
-                        company: data.company || null,
-                        location: data.location || null,
-                        followers_count: data.followers_count ?? null,
-                        public_repos_count: data.public_repos_count ?? null
-                      });
-                      setIsEditing(true);
-                    }}
-                    style={{
-                      height: 36,
-                      padding: "0 16px",
-                      backgroundColor: MINT,
-                      color: MINT_FG,
-                      border: "none",
-                      borderRadius: 6,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Edit Profile
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormValues({ ...profileState });
+                    setIsEditing(true);
+                  }}
+                  style={{
+                    height: 36,
+                    padding: "0 16px",
+                    backgroundColor: MINT,
+                    color: MINT_FG,
+                    border: "none",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Edit Profile
+                </button>
               ) : (
                 <>
                   <button
+                    type="button"
                     onClick={() => setIsEditing(false)}
+                    disabled={savingProfile}
                     style={{
                       height: 36,
                       padding: "0 16px",
@@ -501,35 +514,15 @@ case "profile":
                       borderRadius: 6,
                       fontSize: 13,
                       fontWeight: 600,
-                      cursor: "pointer"
+                      cursor: "pointer",
                     }}
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/profile`, {
-                          method: "PATCH",
-                          headers: {
-                            "Content-Type": "application/json"
-                          },
-                          body: JSON.stringify(formValues),
-                          credentials: "include"
-                        });
-                        
-                        if (!res.ok) {
-                          throw new Error(`Failed to update profile: ${res.status}`);
-                        }
-                        
-                        const result = await res.json();
-                        setIsEditing(false);
-                        // Optionally show success message
-                      } catch (err) {
-                        console.error("Profile update error:", err);
-                        // Optionally show error message
-                      }
-                    }}
+                    type="button"
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
                     style={{
                       height: 36,
                       padding: "0 16px",
@@ -539,30 +532,116 @@ case "profile":
                       borderRadius: 6,
                       fontSize: 13,
                       fontWeight: 600,
-                      cursor: "pointer"
+                      cursor: savingProfile ? "not-allowed" : "pointer",
+                      opacity: savingProfile ? 0.7 : 1,
                     }}
                   >
-                    Save Changes
+                    {savingProfile ? "Saving..." : "Save Changes"}
                   </button>
                 </>
               )}
             </div>
-            
-            {/* Reputation Badge */}
-            <div style={{ backgroundColor: MINT_SOFT, border: `1px solid ${MINT_BDR}`, color: GREEN, fontSize: 13, fontWeight: 700, borderRadius: 9999, padding: "8px 16px", textAlign: "center" }}>★ {overriddenStats.reputationScore} · {overriddenStats.reputationBadge}</div>
-            
+
             {/* Profile Info Section */}
-            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
               {!isEditing ? (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED, fontSize: 13 }}>Joined GIG</span><span style={{ fontWeight: 600, color: CHARCOAL, fontSize: 13 }}>March 2024</span></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED, fontSize: 13 }}>Total Earnings</span><span style={{ fontWeight: 700, color: GREEN, fontSize: 13 }}>{overriddenStats.walletBalance}</span></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED, fontSize: 13 }}>Wallet Address</span><span style={{ fontWeight: 500, color: CHARCOAL, fontSize: 11, fontFamily: "monospace" }}>0x7a2e...4d1f</span></div>
+                  {/* Bio */}
+                  <div>
+                    <span style={{ color: MUTED, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>Bio / Introduction</span>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: CHARCOAL, lineHeight: 1.5 }}>
+                      {profileState.bio || "No bio added yet. Click 'Edit Profile' to introduce yourself."}
+                    </p>
+                  </div>
+
+                  {/* Metadata key-value rows */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Company</span><span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.company || "Independent Contributor"}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Location</span><span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.location || "Remote"}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Public Repos</span><span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.public_repos_count ?? "—"}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Followers</span><span style={{ fontWeight: 600, color: CHARCOAL }}>{profileState.followers_count ?? "—"}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Joined GIG</span><span style={{ fontWeight: 600, color: CHARCOAL }}>March 2024</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Total Earnings</span><span style={{ fontWeight: 700, color: GREEN }}>{overriddenStats.walletBalance}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: MUTED }}>Wallet Address</span><span style={{ fontWeight: 500, color: CHARCOAL, fontSize: 11, fontFamily: "monospace" }}>0x7a2e...4d1f</span></div>
+                  </div>
+
+                  {/* GitHub Connect Section */}
+                  <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
+                    <span style={{ color: MUTED, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>GitHub Profile</span>
+                    <div style={{ marginTop: 8 }}>
+                      {cleanGithubHandle(profileState.github_handle) ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                          <a
+                            href={`https://github.com/${cleanGithubHandle(profileState.github_handle)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: "8px 14px",
+                              backgroundColor: MINT_SOFT,
+                              color: GREEN,
+                              fontWeight: 600,
+                              fontSize: 13,
+                              border: `1px solid ${MINT_BDR}`,
+                              borderRadius: 6,
+                              textDecoration: "none",
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4" /><path d="M12 22a10 9 0 1 0 0-18 10 9 0 0 0 0 18z" /></svg>
+                            <span>@{cleanGithubHandle(profileState.github_handle)}</span>
+                          </a>
+                          <span style={{ fontSize: 11, color: MUTED }}>Verified Contributor</span>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            backgroundColor: "#f9fafb",
+                            border: `1px dashed ${BORDER}`,
+                            borderRadius: 8,
+                            padding: 16,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: "#f59e0b" }} />
+                            <span style={{ fontSize: 13, fontWeight: 700, color: CHARCOAL }}>GitHub Not Connected</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                            Connect your GitHub account to sync your profile avatar, verify your merged pull requests, and display verified proofs of work across bounties.
+                          </p>
+                          <div>
+                            <a
+                              href="/api/auth/github"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "8px 16px",
+                                backgroundColor: CHARCOAL,
+                                color: "#ffffff",
+                                fontWeight: 700,
+                                fontSize: 13,
+                                borderRadius: 6,
+                                textDecoration: "none",
+                              }}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
+                              Connect GitHub Account
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </>
               ) : (
+                /* Editable Form Fields */
                 <>
-                  {/* Editable fields */}
-                  <div style={{ marginBottom: 16 }}>
+                  <div>
                     <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Display Name</label>
                     <input
                       type="text"
@@ -574,29 +653,30 @@ case "profile":
                         border: `1px solid ${BORDER}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        backgroundColor: "#ffffff"
+                        backgroundColor: "#ffffff",
                       }}
                     />
                   </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
+
+                  <div>
                     <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Bio</label>
                     <textarea
                       value={formValues.bio || ""}
                       onChange={(e) => setFormValues(prev => ({ ...prev, bio: e.target.value }))}
+                      rows={3}
                       style={{
                         width: "100%",
-                        height: 80,
                         padding: "8px 12px",
                         border: `1px solid ${BORDER}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        backgroundColor: "#ffffff"
+                        backgroundColor: "#ffffff",
+                        resize: "vertical",
                       }}
                     />
                   </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
+
+                  <div>
                     <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Company</label>
                     <input
                       type="text"
@@ -608,138 +688,114 @@ case "profile":
                         border: `1px solid ${BORDER}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        backgroundColor: "#ffffff"
+                        backgroundColor: "#ffffff",
                       }}
                     />
                   </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
+
+                  <div>
                     <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Location</label>
                     <input
                       type="text"
                       value={formValues.location || ""}
                       onChange={(e) => setFormValues(prev => ({ ...prev, location: e.target.value }))}
+                      placeholder="e.g. Remote / Bangalore, IN"
                       style={{
                         width: "100%",
                         padding: "8px 12px",
                         border: `1px solid ${BORDER}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        backgroundColor: "#ffffff"
+                        backgroundColor: "#ffffff",
                       }}
                     />
                   </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
+
+                  <div>
                     <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Avatar URL</label>
                     <input
                       type="text"
                       value={formValues.avatar_url || ""}
                       onChange={(e) => setFormValues(prev => ({ ...prev, avatar_url: e.target.value }))}
+                      placeholder="https://..."
                       style={{
                         width: "100%",
                         padding: "8px 12px",
                         border: `1px solid ${BORDER}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        backgroundColor: "#ffffff"
+                        backgroundColor: "#ffffff",
                       }}
                     />
-                  </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Followers Count</label>
-                    <input
-                      type="number"
-                      value={formValues.followers_count !== null && formValues.followers_count !== undefined ? String(formValues.followers_count) : ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormValues(prev => ({ 
-                          ...prev, 
-                          followers_count: val === "" ? null : parseInt(val, 10) 
-                        }));
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff"
-                      }}
-                    />
-                  </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>Public Repos Count</label>
-                    <input
-                      type="number"
-                      value={formValues.public_repos_count !== null && formValues.public_repos_count !== undefined ? String(formValues.public_repos_count) : ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormValues(prev => ({ 
-                          ...prev, 
-                          public_repos_count: val === "" ? null : parseInt(val, 10) 
-                        }));
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        backgroundColor: "#ffffff"
-                      }}
-                    />
-                  </div>
-                  
-                  {/* GitHub Connect Button */}
-                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
-                    {formValues.github_handle ? (
-                      <a
-                        href={`https://github.com/${formValues.github_handle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          height: 36,
-                          padding: "0 16px",
-                          backgroundColor: MINT_SOFT,
-                          color: GREEN,
-                          fontWeight: 600,
-                          fontSize: 13,
-                          border: `1px solid ${MINT_BDR}`,
-                          borderRadius: 6,
-                          textDecoration: "none"
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4" /><path d="M12 22a10 9 0 1 0 0-18 10 9 0 0 0 0 18z" /></svg>
-                        @{formValues.github_handle}
-                      </a>
-                    ) : (
-                      <a
-                        href="/api/auth/github"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          height: 36,
-                          padding: "0 16px",
-                          backgroundColor: "transparent",
-                          color: CHARCOAL,
-                          fontWeight: 600,
-                          fontSize: 13,
-                          border: `1.5px solid ${CHARCOAL}`,
-                          borderRadius: 6,
-                          textDecoration: "none"
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
-                        Connect GitHub
-                      </a>
+                    {formValues.avatar_url && (
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, color: MUTED }}>Preview:</span>
+                        <img
+                          src={formValues.avatar_url}
+                          alt="Avatar preview"
+                          style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", border: `1px solid ${BORDER}` }}
+                        />
+                      </div>
                     )}
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: 4, fontSize: 13, color: CHARCOAL, fontWeight: 600 }}>GitHub Handle</label>
+                    <input
+                      type="text"
+                      value={formValues.github_handle || ""}
+                      onChange={(e) => setFormValues(prev => ({ ...prev, github_handle: e.target.value }))}
+                      placeholder="e.g. octocat"
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        border: `1px solid ${BORDER}`,
+                        borderRadius: 6,
+                        fontSize: 13,
+                        backgroundColor: "#ffffff",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>Followers</label>
+                      <input
+                        type="number"
+                        value={formValues.followers_count !== null && formValues.followers_count !== undefined ? String(formValues.followers_count) : ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormValues(prev => ({ ...prev, followers_count: val === "" ? null : parseInt(val, 10) }));
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 6,
+                          fontSize: 13,
+                          backgroundColor: "#ffffff",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: 4, fontSize: 12, color: CHARCOAL, fontWeight: 600 }}>Public Repos</label>
+                      <input
+                        type="number"
+                        value={formValues.public_repos_count !== null && formValues.public_repos_count !== undefined ? String(formValues.public_repos_count) : ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormValues(prev => ({ ...prev, public_repos_count: val === "" ? null : parseInt(val, 10) }));
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 6,
+                          fontSize: 13,
+                          backgroundColor: "#ffffff",
+                        }}
+                      />
+                    </div>
                   </div>
                 </>
               )}
@@ -749,7 +805,9 @@ case "profile":
           {/* Verified Specializations and Contributions (always visible) */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)" }}><h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: CHARCOAL }}>Verified Specializations</h3></div>
+              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)" }}>
+                <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: CHARCOAL }}>Verified Specializations</h3>
+              </div>
               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 {badges.length === 0 ? (
                   <p style={{ margin: 0, color: MUTED, fontSize: 13 }}>No specializations verified yet.</p>
@@ -765,7 +823,10 @@ case "profile":
             </div>
             
             <div style={{ backgroundColor: "#ffffff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)", display: "flex", alignItems: "center", justifyContent: "space-between" }}><h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: CHARCOAL }}>Verified Contributions</h3><span style={{ fontSize: 11, color: MUTED }}>{stats.verifiedContributions} total</span></div>
+              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.02)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: CHARCOAL }}>Verified Contributions</h3>
+                <span style={{ fontSize: 11, color: MUTED }}>{stats.verifiedContributions} total</span>
+              </div>
               <div>
                 {verifiedPRs.length === 0 ? (
                   <p style={{ padding: "16px 20px", margin: 0, color: MUTED, fontSize: 13 }}>No verified contributions yet.</p>
@@ -801,29 +862,58 @@ export default function DeveloperDashboard({ data = FALLBACK, issuePool }: DevDa
   const [withdrawalError, setWithdrawalError] = useState<string | null>(null);
   const [withdrawalSuccess, setWithdrawalSuccess] = useState<boolean>(false);
 
-  // Profile edit form state
+  // Profile state & edit form state
+  const initialGithubHandle = cleanGithubHandle(data?.github_handle || data?.githubHandle);
+  const [profileState, setProfileState] = useState<DeveloperProfileState>({
+    username: data?.username || data?.displayName || FALLBACK.username,
+    handle: data?.handle || FALLBACK.handle,
+    avatar_url: data?.avatar_url || FALLBACK.avatar_url,
+    github_handle: initialGithubHandle,
+    bio: data?.bio || FALLBACK.bio,
+    company: data?.company || FALLBACK.company,
+    location: data?.location || FALLBACK.location,
+    followers_count: data?.followers_count ?? FALLBACK.followers_count,
+    public_repos_count: data?.public_repos_count ?? FALLBACK.public_repos_count,
+  });
   const [isEditing, setIsEditing] = useState(false);
-const [formValues, setFormValues] = useState<{
-     username: string;
-     handle: string;
-     avatar_url: string | null;
-     github_handle: string | null;
-     bio: string | null;
-     company: string | null;
-     location: string | null;
-     followers_count: number | null;
-     public_repos_count: number | null;
-   }>({
-     username: "",
-     handle: "",
-     avatar_url: null,
-     github_handle: null,
-     bio: null,
-     company: null,
-     location: null,
-     followers_count: null,
-     public_repos_count: null
-   });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [formValues, setFormValues] = useState<DeveloperProfileState>({ ...profileState });
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      const sanitizedValues = {
+        ...formValues,
+        github_handle: cleanGithubHandle(formValues.github_handle),
+      };
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(sanitizedValues),
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to update profile: ${res.status}`);
+      }
+
+      setProfileState({ ...formValues });
+      setIsEditing(false);
+      setProfileSuccess("Profile updated successfully!");
+      setTimeout(() => setProfileSuccess(null), 4000);
+    } catch (err: unknown) {
+      setProfileError(getErrorMessage(err));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // Fetch wallet data on mount
   useEffect(() => {
@@ -971,31 +1061,36 @@ const [formValues, setFormValues] = useState<{
         }
       `}</style>
       <div className="dev-page-wrap" style={{ maxWidth: 1120, margin: "0 auto", padding: "32px 36px 80px" }}>
-{activeTab === "issues" ? null : (
-           <DevHeader
-             displayName={mergedData.displayName}
-             handle={mergedData.handle}
-             activeTab={activeTab}
-             githubHandle={mergedData.githubHandle}
-           />
-         )}
-<TabContent
-             activeTab={activeTab}
-             data={mergedData}
-             issuePool={issuePool}
-             walletBalance={balanceToDisplay}
-             transactions={transactionsToDisplay}
-             withdrawalAmount={withdrawalAmount}
-             setWithdrawalAmount={setWithdrawalAmount}
-             withdrawalLoading={withdrawalLoading}
-             withdrawalError={withdrawalError}
-             withdrawalSuccess={withdrawalSuccess}
-             handleWithdrawalSubmit={handleWithdrawalSubmit}
-             isEditing={isEditing}
-             setIsEditing={setIsEditing}
-             formValues={formValues}
-             setFormValues={setFormValues}
-           />
+        {activeTab === "issues" ? null : (
+          <DevHeader
+            displayName={profileState.username || mergedData.displayName}
+            handle={profileState.handle || mergedData.handle}
+            activeTab={activeTab}
+            githubHandle={profileState.github_handle || mergedData.githubHandle}
+          />
+        )}
+        <TabContent
+          activeTab={activeTab}
+          data={mergedData}
+          issuePool={issuePool}
+          walletBalance={balanceToDisplay}
+          transactions={transactionsToDisplay}
+          withdrawalAmount={withdrawalAmount}
+          setWithdrawalAmount={setWithdrawalAmount}
+          withdrawalLoading={withdrawalLoading}
+          withdrawalError={withdrawalError}
+          withdrawalSuccess={withdrawalSuccess}
+          handleWithdrawalSubmit={handleWithdrawalSubmit}
+          profileState={profileState}
+          isEditing={isEditing}
+          setIsEditing={setIsEditing}
+          formValues={formValues}
+          setFormValues={setFormValues}
+          savingProfile={savingProfile}
+          profileSuccess={profileSuccess}
+          profileError={profileError}
+          handleSaveProfile={handleSaveProfile}
+        />
       </div>
     </div>
   );
