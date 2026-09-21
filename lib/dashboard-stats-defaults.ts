@@ -87,20 +87,20 @@ export function getSidebarStatsSync(role: DashboardRole): SidebarStats {
   if (role === 'business') {
     return {
       walletLabel: 'Escrow Vault',
-      walletValue: '$32,500.00',
-      walletSubtext: '$14,200 locked in bounties',
+      walletValue: '$0',
+      walletSubtext: 'No transactions yet',
       walletHref: '/dashboard/business?tab=billing',
-      counts: { 'Tasks Backlog': '8', 'Talent Pool': '42' },
+      counts: { 'Tasks Backlog': '0', 'Talent Pool': '0' },
     };
   }
-  const dev = getDeveloperStatsFallback();
   return {
     walletLabel: 'GIG Wallet',
-    walletValue: '\u20b94,850.00',
-    walletSubtext: 'Above \u20b9500 UPI threshold',
+    walletValue: '₹0',
+    walletSubtext: 'No transactions yet',
     walletHref: '/dashboard/developer?tab=wallet',
-    reputationValue: dev.reputationScore,
-    reputationBadge: dev.reputationBadge,
-    counts: { Tasks: dev.lockedTasks, 'Verified PRs': dev.verifiedContributions },
+    reputationScore: '0',
+    reputationValue: '0',
+    reputationBadge: 'NEW',
+    counts: { Tasks: '0', 'Verified PRs': '0' },
   };
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
+import { createServerClientWithCookies } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
 import { getRepositories, Repository, cleanGithubHandle } from "@/lib/db-operations";
 
@@ -15,7 +15,7 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const dbClient = supabaseAdmin ?? supabase;
+    const dbClient = supabase;
 
     const { data: user } = await dbClient
       .from("users")
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const dbClient = supabaseAdmin ?? supabase;
+    const dbClient = supabase;
 
     const body = await request.json();
     const { name, owner, url, description } = body;

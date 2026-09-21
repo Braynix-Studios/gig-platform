@@ -119,13 +119,13 @@ const FALLBACK: DeveloperDashboardData = {
   stats: {
     reputationScore: "0",
     reputationBadge: "NEW",
-    reputationFooter: "0–100 Weighted Score",
+    reputationFooter: "Reputation score based on verified PR contributions",
     verifiedContributions: "0",
     contributionsFooter: "No contributions yet",
     lockedTasks: "0",
     lockedFooter: "No locked escrow",
     walletBalance: "₹0",
-    walletFooter: "Ready for instant UPI bank withdrawal (Min ₹500)",
+    walletFooter: "Ready for UPI bank withdrawal (Min ₹500)",
   },
   tasks: [],
   transactions: [],
@@ -1357,7 +1357,7 @@ function TabContent({
                     Evidence timeline
                   </h3>
                   <p style={{ margin: "2px 0 0", fontSize: 12, color: MUTED }}>
-                    Cryptographically verified pull requests and merge proofs
+                    Verified pull requests and merge proofs
                   </p>
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>

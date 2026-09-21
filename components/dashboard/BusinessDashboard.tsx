@@ -143,7 +143,7 @@ const FALLBACK: BusinessDashboardData = {
 function createEmptyBizIssuePool(): IssuePoolData {
   return {
     role: "business",
-    displayName: "Enterprise Sponsor",
+    displayName: "Business Account",
     initials: "CO",
     company: null,
     issues: [],
@@ -676,7 +676,7 @@ function TabContent({
     case "billing":
       return (
         <section id="billing" style={{ scrollMarginTop: 24 }}>
-          <SectionHeading title="Escrow Account & Billing / Disbursals" sub="Deterministic escrow management, automated bounty disbursals, and on-chain receipts" />
+          <SectionHeading title="Escrow Account & Billing / Disbursals" sub="Deterministic escrow management, automated bounty disbursals, and secure audit records" />
           <EscrowCard disbursals={disbursals} vaultAmount="14,200" lockedAmount="4,800 Coins" disbursedAmount="9,400 Coins" nextInvoiceDate="Monthly (Next: Oct 1)" />
         </section>
       );
@@ -847,7 +847,7 @@ function TabContent({
               </div>
               <div style={{ marginTop: 24 }}>
                 <p style={{ margin: "0 0 8px", fontSize: 11, color: "#a1a1aa" }}>
-                  100% Smart Contract Collateralized
+                  Funds held in escrow
                 </p>
                 <div style={{ height: 8, backgroundColor: "rgba(255, 255, 255, 0.12)", borderRadius: 9999, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: "100%", backgroundColor: MINT, borderRadius: 9999 }} />
@@ -954,7 +954,7 @@ function TabContent({
                       maxWidth: 640,
                     }}
                   >
-                    {profileState.bio || "Building next-generation open source distributed infrastructure and high-assurance web platforms with cryptographically verified engineering talent."}
+                    {profileState.bio || "Building next-generation open source distributed infrastructure and high-assurance web platforms."}
                   </p>
 
                   <div
@@ -1116,7 +1116,7 @@ function TabContent({
                   <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: CHARCOAL }}>
                     Enterprise engineering scope
                   </h3>
-                  <span style={{ fontSize: 11, color: GREEN, fontWeight: 700 }}>100% ESCROW</span>
+                  <span style={{ fontSize: 11, color: GREEN, fontWeight: 700 }}>ESCROW ACTIVE</span>
                 </div>
                 <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
                   <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.55 }}>
@@ -1271,7 +1271,7 @@ function TabContent({
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: MUTED }}>
                       <span style={{ fontFamily: "monospace" }}>Tx: {dis.txHash}</span>
                       <span style={{ color: GREEN, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        {checkIcon} Smart contract verified
+                        {checkIcon} Verified
                       </span>
                     </div>
                   </div>
@@ -1324,7 +1324,7 @@ function TabContent({
                 Scale engineering output with verified talent
               </h3>
               <p style={{ margin: "4px 0 0", fontSize: 13, color: "#a1a1aa" }}>
-                Deterministic escrow contracts, automated test validation, and cryptographically verified contributors.
+                Deterministic escrow contracts, automated test validation, and verified contributors.
               </p>
             </div>
             <Link

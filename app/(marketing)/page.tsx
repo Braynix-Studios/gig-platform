@@ -302,10 +302,10 @@ export default function Home() {
                     <path d="m9 12 2 2 4-4"></path>
                   </svg>
                 </div>
-                <h3 className="feature-title">Cryptographic Audit Ledger</h3>
+                <h3 className="feature-title">Secure Audit Ledger</h3>
                 <p className="feature-desc">GIG records and verifies eligible payment events through a tamper-evident audit ledger. Every payout generates a permanent GIG Payment Proof containing the withdrawal ID, ledger reference, and timestamp. All personal identifiers remain protected for total privacy.</p>
                 <div className="feature-proof-tag">
-                  <span>Zero PII exposed · Cryptographically verifiable receipt</span>
+                  <span>Zero PII exposed · Verifiable receipt</span>
                 </div>
               </div>
               <div className="feature-card">

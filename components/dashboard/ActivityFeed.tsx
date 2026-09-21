@@ -128,8 +128,8 @@ export default function ActivityFeed({
     list.push({
       id: "sys-tier",
       category: "system",
-      title: `${role === "business" ? "Tier 1 Enterprise Sponsor" : "Tier 2 GIG Verified Contributor"} Active`,
-      subtitle: "On-chain contribution record and multi-sig escrow initialized",
+      title: `${role === "business" ? "Tier 1 Business" : "Tier 2 Contributor"} Active`,
+      subtitle: "Verified contribution record and escrow initialized",
       timestamp: "Active",
       status: "LIVE",
       statusColor: MINT,

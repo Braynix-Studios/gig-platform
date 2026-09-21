@@ -65,13 +65,13 @@ export interface DeveloperStats {
 const DEV_FALLBACK: DeveloperStats = {
   reputationScore: '0',
   reputationBadge: 'NEW',
-  reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
-  verifiedContributions: '24',
-  contributionsFooter: 'Across 6 production open-source repositories',
-  lockedTasks: '2',
-  lockedFooter: '\u20b94,700 in locked escrow \u00b7 48h lock active',
-  walletBalance: '\u20b94,850',
-  walletFooter: 'Ready for instant UPI bank withdrawal (Min \u20b9500)',
+  reputationFooter: 'Reputation score based on verified PR contributions',
+  verifiedContributions: '0',
+  contributionsFooter: 'No verified contributions yet',
+  lockedTasks: '0',
+  lockedFooter: 'No active escrow locks',
+  walletBalance: '₹0',
+  walletFooter: 'Ready for UPI bank withdrawal (Min ₹500)',
 };
 
 export async function getDeveloperStats(userId?: string): Promise<DeveloperStats> {
@@ -106,45 +106,52 @@ export async function getSidebarStats(role: DashboardRole, userId?: string): Pro
       return getSidebarStatsSync('business');
     }
     try {
-      const [walletRes, tasksRes, usersRes, userRes] = await Promise.all([
+      const [walletRes, userRes] = await Promise.all([
         db.from('wallets').select('available_balance').eq('user_id', userId).maybeSingle(),
-        db.from('tasks').select('*', { count: 'exact', head: true }).eq('status', 'open'),
-        db.from('users').select('*', { count: 'exact', head: true }).eq('role', 'developer'),
         db.from('users').select('company').eq('id', userId).maybeSingle(),
       ]);
 
-      if (walletRes.error || tasksRes.error || usersRes.error || userRes.error || walletRes.data == null) {
+      if (walletRes.error || userRes.error || walletRes.data == null) {
         return getSidebarStatsSync('business');
       }
 
       const balance = walletRes.data.available_balance ?? 0;
-      const taskBacklog = tasksRes.count ?? 0;
-      const talentPool = usersRes.count ?? 0;
-
       const company = userRes.data?.company ?? null;
-      let issuePoolCount = 0;
+
+      let taskBacklog = 0;
+      let talentPool = 0;
       if (company) {
         const repoRes = await db.from('repositories').select('id').eq('owner', company);
         const repoIds = (repoRes.data ?? []).map((r: { id: string }) => r.id);
         if (repoIds.length > 0) {
-          const poolRes = await db
+          const scopedTasks = await db
             .from('tasks')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'open')
             .in('repository_id', repoIds);
-          issuePoolCount = poolRes.count ?? 0;
+          taskBacklog = scopedTasks.count ?? 0;
+          const scopedClaims = await db
+            .from('claims')
+            .select('user_id')
+            .in('task_id', repoIds)
+            .eq('status', 'active')
+            .gt('expires_at', new Date().toISOString());
+          if (scopedClaims.data) {
+            const uniqueDevs = new Set((scopedClaims.data as any[]).map((c) => c.user_id));
+            talentPool = uniqueDevs.size;
+          }
         }
       }
 
       return {
         walletLabel: 'Escrow Vault',
         walletValue: formatBalance(balance),
-        walletSubtext: '$14,200 locked in bounties',
+        walletSubtext: balance > 0 ? 'Funds held in escrow' : 'No transactions yet',
         walletHref: '/dashboard/business?tab=billing',
         counts: {
           'Tasks Backlog': String(taskBacklog),
           'Talent Pool': String(talentPool),
-          'Issue Pool': String(issuePoolCount),
+          'Issue Pool': '0',
         },
       };
     } catch {
@@ -225,7 +232,7 @@ export async function getDeveloperDashboard(userId: string) {
     ? {
         reputationScore: '0',
         reputationBadge: 'NEW',
-        reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
+        reputationFooter: 'Reputation not yet calculated',
         verifiedContributions: String(profile.contributions_count),
         contributionsFooter:
           contributions.length > 0
@@ -507,7 +514,7 @@ function buildEmptyIssuePool(
 ): IssuePoolData {
   const displayName =
     name ||
-    (role === 'business' ? 'Enterprise Sponsor' : 'Developer');
+    (role === 'business' ? 'Business Account' : 'Developer');
   return {
     role,
     displayName,
@@ -619,7 +626,7 @@ export async function getIssuePoolData(
     const displayName =
       user?.username ||
       user?.email?.split('@')[0] ||
-      (role === 'business' ? 'Enterprise Sponsor' : 'Developer');
+      (role === 'business' ? 'Business Account' : 'Developer');
 
     const recommended: string[] =
       role === 'business'

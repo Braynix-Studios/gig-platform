@@ -4,6 +4,7 @@ import { supabaseAdmin, supabase } from "@/lib/supabaseClient";
 import {
   createContribution,
   creditReward,
+  releaseReward,
   setClaimStatus,
   updateTaskStatus,
   expireOtherClaimsForTask,
@@ -139,10 +140,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     client,
   );
 
-  // 5. Queue reward as PENDING
+  // 5. Queue reward as PENDING then advance to AVAILABLE
   const amount = task?.reward_amount ?? 0;
   if (amount > 0 && contribution) {
-    await creditReward(
+    const payout = await creditReward(
       {
         user_id: matchingSubmission.user_id,
         task_id: matchingSubmission.task_id,
@@ -152,6 +153,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       client,
     );
+    if (!payout.ok) {
+      return NextResponse.json(
+        { ok: false, message: `PR verified but reward failed: ${payout.error}` },
+        { status: 500 },
+      );
+    }
+    if (payout.transactionId) {
+      const released = await releaseReward(
+        { transactionId: payout.transactionId },
+        client,
+      );
+      if (!released.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: `PR verified but reward release failed: ${released.error}`,
+          },
+          { status: 500 },
+        );
+      }
+    }
   }
 
   // 6. Complete winning claim, close task, and expire competitor claims
@@ -162,7 +184,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       ok: true,
-      message: `PR #${prNumber} verified and merged via webhook. Reward queued as PENDING.`,
+      message: `PR #${prNumber} verified and merged via webhook. Reward advanced to AVAILABLE.`,
       contribution_id: contribution?.id ?? null,
     },
     { status: 200 },

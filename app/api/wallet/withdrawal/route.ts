@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
-import { debitWallet } from "@/lib/db-operations";
 
 export async function POST(request: Request) {
   try {
@@ -38,50 +37,34 @@ export async function POST(request: Request) {
       );
     }
 
-    // Attempt atomic_request_withdrawal RPC first in non-test environment
-    const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
-    if (!isTestEnv && typeof supabase.rpc === "function") {
-      try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc("atomic_request_withdrawal", {
-          p_user_id: session.userId,
-          p_amount: amount,
-          p_currency: "INR",
-        });
-        if (!rpcError && rpcData) {
-          if (rpcData.ok || rpcData.success) {
-            return NextResponse.json({
-              ok: true,
-              status: "REQUESTED",
-              newBalance: rpcData.new_balance ?? rpcData.available_balance ?? null,
-              transactionId: rpcData.transaction_id ?? null,
-            });
-          }
-          return NextResponse.json(
-            { error: rpcData.error || "Withdrawal request failed" },
-            { status: 400 },
-          );
+    // Canonical path: atomic_request_withdrawal RPC only (no non-atomic fallback)
+    if (typeof supabase.rpc === "function") {
+      const { data: rpcData, error: rpcError } = await supabase.rpc("atomic_request_withdrawal", {
+        p_user_id: session.userId,
+        p_amount: amount,
+        p_currency: "INR",
+      });
+
+      if (!rpcError && rpcData) {
+        if (rpcData.ok || rpcData.success) {
+          return NextResponse.json({
+            ok: true,
+            status: "REQUESTED",
+            newBalance: rpcData.new_balance ?? rpcData.available_balance ?? null,
+            transactionId: rpcData.transaction_id ?? null,
+          });
         }
-      } catch {
-        // Fallback
+        return NextResponse.json(
+          { error: rpcData.error || "Withdrawal request failed" },
+          { status: 400 },
+        );
       }
     }
 
-    // Fallback: create REQUESTED transaction record via debitWallet
-    const result = await debitWallet({
-      userId: session.userId,
-      amount: amount,
-      currency: "INR", // Default currency as specified
-      status: "REQUESTED",
-    }, supabase);
-
-    if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error || "Withdrawal failed" },
-        { status: 400 },
-      );
-    }
-
-    return NextResponse.json({ ok: true, status: "REQUESTED", newBalance: result.newBalance ?? null });
+    return NextResponse.json(
+      { error: "Withdrawal request failed: database operation unavailable" },
+      { status: 500 },
+    );
   } catch (error) {
     console.error("Withdrawal error:", error);
     return NextResponse.json(
@@ -138,8 +121,21 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Withdrawal transaction not found" }, { status: 404 });
     }
 
-    const walletOwnerId = (txRecord as any)?.wallets?.user_id;
-    if (walletOwnerId && walletOwnerId !== session.userId && session.role !== "business") {
+    const walletOwner = Array.isArray((txRecord as any)?.wallets)
+      ? (txRecord as any)?.wallets[0]
+      : (txRecord as any)?.wallets;
+    let walletOwnerId = walletOwner?.user_id ?? (txRecord as any)?.wallets?.user_id;
+
+    if (!walletOwnerId && txRecord.wallet_id) {
+      const { data: walletData } = await adminClient
+        .from("wallets")
+        .select("user_id")
+        .eq("id", txRecord.wallet_id)
+        .maybeSingle();
+      walletOwnerId = walletData?.user_id;
+    }
+
+    if (!walletOwnerId || walletOwnerId !== session.userId) {
       return NextResponse.json({ error: "Forbidden: transaction does not belong to caller" }, { status: 403 });
     }
 

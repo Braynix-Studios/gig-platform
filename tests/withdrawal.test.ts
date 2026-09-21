@@ -4,6 +4,7 @@ const { mockSupabase, mockUpdateChain } = vi.hoisted(() => {
   const mockUpdateChain = {
     eq: vi.fn().mockResolvedValue({ error: null }),
   };
+  const mockRpc = vi.fn();
   const mockSupabase = {
     from: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
@@ -14,8 +15,9 @@ const { mockSupabase, mockUpdateChain } = vi.hoisted(() => {
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     update: vi.fn().mockReturnValue(mockUpdateChain),
     insert: vi.fn().mockResolvedValue({ error: null }),
+    rpc: mockRpc,
   };
-  return { mockSupabase, mockUpdateChain };
+  return { mockSupabase, mockUpdateChain, mockRpc };
 });
 
 vi.mock('../lib/supabaseClient', () => ({
@@ -34,7 +36,7 @@ vi.mock('../lib/supabaseAuth', () => ({
 import * as supabaseClientModule from '../lib/supabaseClient';
 import * as supabaseAuthModule from '../lib/supabaseAuth';
 import { debitWallet } from '../lib/db-operations';
-import { POST } from '../app/api/wallet/withdrawal/route';
+import { POST, PATCH } from '../app/api/wallet/withdrawal/route';
 
 type MockSupabase = typeof mockSupabase;
 
@@ -144,11 +146,17 @@ describe('Withdrawal API endpoint', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should return 200 for successful withdrawal', async () => {
+  it('should create withdrawal request via atomic_request_withdrawal RPC', async () => {
     mockSupabaseAuth.getSession.mockResolvedValueOnce({ userId: 'test-user-id' });
-    const walletData = { id: 'wallet-1', user_id: 'test-user-id', available_balance: 1000, total_earned: 1000 };
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: walletData, error: null });
-    mockSupabase.insert.mockResolvedValueOnce({ error: null });
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: {
+        ok: true,
+        status: 'REQUESTED',
+        new_balance: 500,
+        transaction_id: 'tx-1',
+      },
+      error: null,
+    });
 
     const request = new Request('http://localhost/api/wallet/withdrawal', {
       method: 'POST',
@@ -159,6 +167,7 @@ describe('Withdrawal API endpoint', () => {
     expect(response.status).toBe(200);
     const json = await response.json();
     expect(json.ok).toBe(true);
+    expect(json.transactionId).toBe('tx-1');
   });
 
   it('should return 401 for unauthorized (no session)', async () => {
@@ -199,10 +208,12 @@ describe('Withdrawal API endpoint', () => {
     expect(json.error).toBe('Minimum withdrawal amount is 500');
   });
 
-  it('should return 400 for insufficient balance from debitWallet', async () => {
+  it('should return 400 when atomic_request_withdrawal RPC returns error', async () => {
     mockSupabaseAuth.getSession.mockResolvedValueOnce({ userId: 'test-user-id' });
-    const walletData = { id: 'wallet-1', user_id: 'test-user-id', available_balance: 300, total_earned: 300 };
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: walletData, error: null });
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: { error: 'Insufficient balance', ok: false },
+      error: null,
+    });
 
     const request = new Request('http://localhost/api/wallet/withdrawal', {
       method: 'POST',
@@ -215,9 +226,8 @@ describe('Withdrawal API endpoint', () => {
     expect(json.error).toBe('Insufficient balance');
   });
 
-  it('should return 400 for wallet not found', async () => {
+  it('should return 500 when RPC is unavailable', async () => {
     mockSupabaseAuth.getSession.mockResolvedValueOnce({ userId: 'test-user-id' });
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
 
     const request = new Request('http://localhost/api/wallet/withdrawal', {
       method: 'POST',
@@ -225,9 +235,9 @@ describe('Withdrawal API endpoint', () => {
     });
 
     const response = await POST(request);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(500);
     const json = await response.json();
-    expect(json.error).toBe('Wallet not found');
+    expect(json.error).toBe('Withdrawal request failed: database operation unavailable');
   });
 
   it('should return 500 for internal error (Supabase misconfiguration)', async () => {
@@ -244,11 +254,17 @@ describe('Withdrawal API endpoint', () => {
     expect(json.error).toBe('Supabase is not configured');
   });
 
-  it('test_r2i1_concurrent_withdrawal_race: concurrent withdrawals cannot overdraw wallet balance', async () => {
+  it('test_r2i1_concurrent_withdrawal_race: concurrent withdrawals via RPC', async () => {
     mockSupabaseAuth.getSession.mockResolvedValue({ userId: 'test-user-id' });
-    // Wallet has balance 600. Two simultaneous withdrawals of 500.
-    const walletData = { id: 'wallet-1', user_id: 'test-user-id', available_balance: 600, total_earned: 600 };
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: walletData, error: null });
+    mockSupabase.rpc
+      .mockResolvedValueOnce({
+        data: { ok: true, status: 'REQUESTED', new_balance: 500, transaction_id: 'tx-1' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { error: 'Insufficient balance', ok: false },
+        error: null,
+      });
 
     const req1 = new Request('http://localhost/api/wallet/withdrawal', {
       method: 'POST',
@@ -257,12 +273,6 @@ describe('Withdrawal API endpoint', () => {
 
     const res1 = await POST(req1);
     expect(res1.status).toBe(200);
-
-    // Second simultaneous request sees reduced balance (100) or atomic lock fail
-    mockSupabase.maybeSingle.mockResolvedValueOnce({
-      data: { ...walletData, available_balance: 100 },
-      error: null,
-    });
 
     const req2 = new Request('http://localhost/api/wallet/withdrawal', {
       method: 'POST',
@@ -273,6 +283,139 @@ describe('Withdrawal API endpoint', () => {
     expect(res2.status).toBe(400);
     const json2 = await res2.json();
     expect(json2.error).toMatch(/insufficient balance/i);
+  });
+});
+
+describe('Withdrawal PATCH API endpoint (Ownership & Authorization)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetSupabaseMocks();
+  });
+
+  it('should return 401 for unauthorized PATCH request', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValueOnce(null);
+
+    const request = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'PATCH',
+      body: JSON.stringify({ transaction_id: 'tx-1', payout_status: 'PAID' }),
+    });
+
+    const response = await PATCH(request);
+    expect(response.status).toBe(401);
+  });
+
+  it('should return 400 for invalid payout status', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValueOnce({ userId: 'dev-1', role: 'developer' });
+
+    const request = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'PATCH',
+      body: JSON.stringify({ transaction_id: 'tx-1', payout_status: 'INVALID_STATUS' }),
+    });
+
+    const response = await PATCH(request);
+    expect(response.status).toBe(400);
+  });
+
+  it('should return 403 when business user attempts to confirm another user withdrawal (R1 authorization fix)', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValueOnce({
+      userId: 'biz-user-99',
+      role: 'business',
+    });
+
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: {
+        id: 'tx-100',
+        wallet_id: 'wallet-dev-1',
+        status: 'REQUESTED',
+        wallets: { user_id: 'dev-user-1' },
+      },
+      error: null,
+    });
+
+    const request = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'PATCH',
+      body: JSON.stringify({ transaction_id: 'tx-100', payout_status: 'PAID' }),
+    });
+
+    const response = await PATCH(request);
+    expect(response.status).toBe(403);
+    const json = await response.json();
+    expect(json.error).toMatch(/forbidden|does not belong to caller/i);
+  });
+
+  it('should return 403 when developer attempts to confirm another user withdrawal', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValueOnce({
+      userId: 'dev-user-2',
+      role: 'developer',
+    });
+
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: {
+        id: 'tx-100',
+        wallet_id: 'wallet-dev-1',
+        status: 'REQUESTED',
+        wallets: { user_id: 'dev-user-1' },
+      },
+      error: null,
+    });
+
+    const request = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'PATCH',
+      body: JSON.stringify({ transaction_id: 'tx-100', payout_status: 'PAID' }),
+    });
+
+    const response = await PATCH(request);
+    expect(response.status).toBe(403);
+    const json = await response.json();
+    expect(json.error).toMatch(/forbidden|does not belong to caller/i);
+  });
+
+  it('should allow transaction owner to confirm payout with PAID status', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValueOnce({
+      userId: 'dev-user-1',
+      role: 'developer',
+    });
+
+    // 1. txRecord check: owned by dev-user-1
+    mockSupabase.maybeSingle
+      .mockResolvedValueOnce({
+        data: {
+          id: 'tx-100',
+          wallet_id: 'wallet-dev-1',
+          status: 'REQUESTED',
+          wallets: { user_id: 'dev-user-1' },
+        },
+        error: null,
+      })
+      // 2. tx query in fallback
+      .mockResolvedValueOnce({
+        data: {
+          id: 'tx-100',
+          wallet_id: 'wallet-dev-1',
+          amount: -500,
+          status: 'REQUESTED',
+        },
+        error: null,
+      })
+      // 3. wallet balance query
+      .mockResolvedValueOnce({
+        data: {
+          available_balance: 1000,
+        },
+        error: null,
+      });
+
+    const request = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'PATCH',
+      body: JSON.stringify({ transaction_id: 'tx-100', payout_status: 'PAID' }),
+    });
+
+    const response = await PATCH(request);
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.ok).toBe(true);
+    expect(json.status).toBe('PAID');
+    expect(json.newBalance).toBe(500);
   });
 });
 

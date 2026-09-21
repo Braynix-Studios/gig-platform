@@ -12,6 +12,7 @@ const { mockSupabase, mockDbOps } = vi.hoisted(() => {
   const mockDbOps = {
     createContribution: vi.fn(),
     creditReward: vi.fn(),
+    releaseReward: vi.fn(),
     setClaimStatus: vi.fn(),
     updateTaskStatus: vi.fn(),
     expireOtherClaimsForTask: vi.fn(),

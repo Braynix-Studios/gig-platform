@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
+import { createServerClientWithCookies } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
-import { debitWallet } from "@/lib/db-operations";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -15,7 +14,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized. Please log in." }, { status: 401 });
     }
 
-    const dbClient = supabaseAdmin ?? supabase;
+    const dbClient = supabase;
     const { data: user } = await dbClient
       .from("users")
       .select("role, company")
@@ -141,102 +140,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // 4. Atomic task creation with escrow:
-    // In production, attempt atomic_create_task_with_escrow RPC
-    const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
-    if (!isTestEnv && typeof dbClient.rpc === "function") {
-      try {
-        const { data: rpcData, error: rpcError } = await dbClient.rpc("atomic_create_task_with_escrow", {
-          p_business_id: session.userId,
-          p_repository_id: targetRepoId,
-          p_title: title.trim(),
-          p_issue_url: issue_url?.trim() || null,
-          p_reward_amount: reward,
-          p_reward_currency: reward_currency || "INR",
-          p_experience_level: difficulty || "standard",
-          p_tags: tags || (technology ? [technology.trim()] : null),
-          p_description: description?.trim() || null,
-        });
+    // 4. Atomic task creation with escrow: canonical path
+    if (typeof dbClient.rpc === "function") {
+      const { data: rpcData, error: rpcError } = await dbClient.rpc("atomic_create_task_with_escrow", {
+        p_business_id: session.userId,
+        p_repository_id: targetRepoId,
+        p_title: title.trim(),
+        p_issue_url: issue_url?.trim() || null,
+        p_reward_amount: reward,
+        p_reward_currency: reward_currency || "INR",
+        p_experience_level: difficulty || "standard",
+        p_tags: tags || (technology ? [technology.trim()] : null),
+        p_description: description?.trim() || null,
+      });
 
-        if (!rpcError && rpcData) {
-          if (rpcData.ok || rpcData.success) {
-            return NextResponse.json({ task: rpcData.task, task_id: rpcData.task_id }, { status: 201 });
-          }
-          return NextResponse.json(
-            { error: rpcData.error || "Failed to create task" },
-            { status: 400 },
-          );
+      if (!rpcError && rpcData) {
+        if (rpcData.ok || rpcData.success) {
+          return NextResponse.json({ task: rpcData.task, task_id: rpcData.task_id }, { status: 201 });
         }
-      } catch {
-        // Fallback to manual compensating transaction
+        const isForbidden = rpcData.error && String(rpcData.error).toLowerCase().includes("forbidden");
+        return NextResponse.json(
+          { error: rpcData.error || "Failed to create task" },
+          { status: isForbidden ? 403 : 400 },
+        );
       }
     }
 
-    // 5. Fallback Mode: Deduct escrow from business wallet
-    const debitResult = await debitWallet(
-      {
-        userId: session.userId,
-        amount: reward,
-        currency: reward_currency || "INR",
-        type: "ESCROW_LOCK",
-        status: "COMPLETED",
-      },
-      dbClient,
+    return NextResponse.json(
+      { error: "Failed to create task: database operation unavailable" },
+      { status: 500 },
     );
-
-    if (!debitResult.ok) {
-      return NextResponse.json(
-        { error: `Insufficient GIG Coins balance: ${debitResult.error || "Please top up your wallet."}` },
-        { status: 400 },
-      );
-    }
-
-    const { data: task, error } = await dbClient
-      .from("tasks")
-      .insert({
-        repository_id: targetRepoId,
-        title: title.trim(),
-        description: description?.trim() || null,
-        issue_url: issue_url?.trim() || null,
-        difficulty: difficulty || "medium",
-        technology: technology?.trim() || null,
-        status: "open",
-        reward_amount: reward,
-        reward_currency: reward_currency || "INR",
-        escrow_locked: true,
-      })
-      .select()
-      .single();
-
-    if (error || !task) {
-      // Compensating refund: business funds are immediately refunded if task insert fails!
-      const { data: currentWallet } = await dbClient
-        .from("wallets")
-        .select("id, available_balance")
-        .eq("user_id", session.userId)
-        .maybeSingle();
-
-      if (currentWallet) {
-        await dbClient
-          .from("wallets")
-          .update({
-            available_balance: (currentWallet.available_balance ?? 0) + reward,
-          })
-          .eq("id", currentWallet.id);
-
-        await dbClient.from("wallet_transactions").insert({
-          wallet_id: currentWallet.id,
-          amount: reward,
-          currency: reward_currency || "INR",
-          type: "TOPUP",
-          status: "REFUNDED",
-        });
-      }
-
-      return NextResponse.json({ error: error?.message || "Task creation failed" }, { status: 400 });
-    }
-
-    return NextResponse.json({ task }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/tasks]", err);
     return NextResponse.json(

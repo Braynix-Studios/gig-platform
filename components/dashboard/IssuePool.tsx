@@ -1057,7 +1057,7 @@ export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolPr
           </aside>
         </div>
 
-        {/* On-chain banner */}
+        {/* Verification banner */}
         <div
           style={{
             display: "flex",
@@ -1096,9 +1096,9 @@ export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolPr
               </svg>
             </span>
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: CHARCOAL }}>Issue activity is recorded on-chain</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: CHARCOAL }}>Issue activity is tracked and verified</p>
               <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED, lineHeight: 1.45 }}>
-                Every claim and verified pull request is written to the public audit record before any reward is released.
+                Every claim and verified pull request is recorded with verification before any reward is released.
               </p>
             </div>
           </div>

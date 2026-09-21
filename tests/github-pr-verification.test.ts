@@ -21,6 +21,7 @@ const { mockDbOperations, mockSession } = vi.hoisted(() => {
     createContribution: vi.fn(),
     setClaimStatus: vi.fn(),
     creditReward: vi.fn(),
+    releaseReward: vi.fn(),
     updateTaskStatus: vi.fn(),
     expireOtherClaimsForTask: vi.fn(),
     getClaimById: vi.fn(),

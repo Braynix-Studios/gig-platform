@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getSession } from '@/lib/session';
 import {
   getSubmissionById,
@@ -11,6 +12,7 @@ import {
   createContribution,
   setClaimStatus,
   creditReward,
+  releaseReward,
   updateTaskStatus,
   expireOtherClaimsForTask,
   getClaimById,
@@ -221,6 +223,19 @@ export async function reviewSubmissionAction(
     return { ok: false, message: `PR verified but payout failed: ${payout.error}` };
   }
 
+  // Advance reward from PENDING → AVAILABLE after business verification.
+  // The creditReward() call created a PENDING wallet_transaction; releaseReward()
+  // atomically transitions it to AVAILABLE and credits available_balance.
+  if (payout.transactionId) {
+    const released = await releaseReward({ transactionId: payout.transactionId }, supabaseAdmin);
+    if (!released.ok) {
+      return {
+        ok: false,
+        message: `PR verified and reward queued, but release failed: ${released.error}`,
+      };
+    }
+  }
+
   await setClaimStatus(submission.claim_id, 'completed');
   // Competitive racing resolution: mark task completed and expire competitor claims
   await updateTaskStatus(task.id, 'closed', 'open');
@@ -228,5 +243,5 @@ export async function reviewSubmissionAction(
 
   revalidatePath('/dashboard/business', 'page');
   revalidatePath('/dashboard/developer', 'page');
-  return { ok: true, message: `PR approved — reward of ${amount} ${task.reward_currency || 'INR'} queued as PENDING verification.` };
+  return { ok: true, message: `PR approved — reward of ${amount} ${task.reward_currency || 'INR'} released to available balance.` };
 }

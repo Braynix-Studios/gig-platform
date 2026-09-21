@@ -277,7 +277,7 @@ export interface CreditRewardInput {
 export async function creditReward(
   input: CreditRewardInput,
   clientOverride?: SupabaseClient | null,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; transactionId?: string }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
 
@@ -297,7 +297,9 @@ export async function creditReward(
         p_contribution_id: input.contribution_id ?? null,
       });
       if (!error && data) {
-        if (data.ok || data.success) return { ok: true };
+        if (data.ok || data.success) {
+          return { ok: true, transactionId: data.transaction_id ?? data.tx_id ?? undefined };
+        }
         return { ok: false, error: data.error || "Credit reward failed" };
       }
     } catch {
@@ -321,13 +323,13 @@ export async function creditReward(
       .eq("type", "TASK_REWARD")
       .maybeSingle();
     if (existingTx) {
-      return { ok: true };
+      return { ok: true, transactionId: existingTx.id };
     }
   }
 
   // R1b: Do NOT increment available_balance immediately!
   // Insert wallet_transactions with status: 'PENDING'
-  const { error: txError } = await client.from("wallet_transactions").insert({
+  const { data: txData, error: txError } = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     task_id: input.task_id,
     contribution_id: input.contribution_id ?? null,
@@ -335,10 +337,12 @@ export async function creditReward(
     currency: input.currency,
     type: "TASK_REWARD",
     status: "PENDING",
-  });
+  })
+  .select("id")
+  .maybeSingle();
   if (txError) return { ok: false, error: txError.message };
 
-  return { ok: true };
+  return { ok: true, transactionId: txData?.id };
 }
 
 export interface DebitWalletInput {
@@ -538,10 +542,40 @@ export interface CreditTopupInput {
 export async function creditTopup(
   input: CreditTopupInput,
   clientOverride?: SupabaseClient | null,
-): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+): Promise<{ ok: boolean; error?: string; newBalance?: number; transactionId?: string }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
 
+  if (input.amount <= 0) {
+    return { ok: false, error: "Topup amount must be positive" };
+  }
+
+  // Attempt atomic_credit_topup RPC first in non-test environment
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_credit_topup", {
+        p_user_id: input.userId,
+        p_amount: input.amount,
+        p_currency: input.currency ?? "INR",
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return {
+            ok: true,
+            newBalance: data.new_balance ?? data.newBalance,
+            transactionId: data.transaction_id,
+          };
+        }
+        return { ok: false, error: data.error || "Topup failed" };
+      }
+    } catch {
+      // Fallback to atomic compensation
+    }
+  }
+
+  // Atomic fallback: ensuring compensating rollback if transaction insert fails
   let { data: wallet } = await client
     .from("wallets")
     .select()
@@ -565,8 +599,8 @@ export async function creditTopup(
     wallet = newWallet;
   }
 
-  const currentBalance = wallet.available_balance ?? 0;
-  const newBalance = currentBalance + input.amount;
+  const initialBalance = wallet.available_balance ?? 0;
+  const newBalance = initialBalance + input.amount;
 
   const { error: updateError } = await client
     .from("wallets")
@@ -575,7 +609,7 @@ export async function creditTopup(
 
   if (updateError) return { ok: false, error: updateError.message };
 
-  const { error: txError } = await client.from("wallet_transactions").insert({
+  const insertRes = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     task_id: null,
     contribution_id: null,
@@ -585,9 +619,235 @@ export async function creditTopup(
     status: "COMPLETED",
   });
 
-  if (txError) return { ok: false, error: txError.message };
+  const txError = insertRes?.error;
+  if (txError) {
+    // Compensating rollback: atomically revert balance if transaction insert fails
+    await client
+      .from("wallets")
+      .update({ available_balance: initialBalance })
+      .eq("id", wallet.id);
+
+    return { ok: false, error: txError.message };
+  }
 
   return { ok: true, newBalance };
+}
+
+export interface ReleaseRewardInput {
+  transactionId: string;
+}
+
+export async function releaseReward(
+  input: ReleaseRewardInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  const client = clientOverride ?? supabaseAdmin ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_release_reward", {
+        p_transaction_id: input.transactionId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return { ok: true, newBalance: data.new_balance ?? data.newBalance };
+        }
+        return { ok: false, error: data.error || "Release reward failed" };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback implementation
+  const { data: tx, error: txError } = await client
+    .from("wallet_transactions")
+    .select("id, wallet_id, amount, status")
+    .eq("id", input.transactionId)
+    .maybeSingle();
+
+  if (txError || !tx) {
+    return { ok: false, error: "Transaction not found" };
+  }
+
+  if (tx.status === "AVAILABLE") {
+    return { ok: true };
+  }
+
+  if (tx.status !== "PENDING" && tx.status !== "VERIFIED") {
+    return { ok: false, error: "Transaction is not in PENDING or VERIFIED status" };
+  }
+
+  const { data: wallet, error: walletError } = await client
+    .from("wallets")
+    .select("id, available_balance, total_earned")
+    .eq("id", tx.wallet_id)
+    .maybeSingle();
+
+  if (walletError || !wallet) {
+    return { ok: false, error: "Associated wallet not found" };
+  }
+
+  const rewardAmount = Math.abs(tx.amount);
+  const initialBalance = wallet.available_balance ?? 0;
+  const initialEarned = wallet.total_earned ?? 0;
+  const newBalance = initialBalance + rewardAmount;
+  const newEarned = initialEarned + rewardAmount;
+
+  const { error: updateError } = await client
+    .from("wallets")
+    .update({ available_balance: newBalance, total_earned: newEarned })
+    .eq("id", wallet.id);
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  const { error: txUpdateError } = await client
+    .from("wallet_transactions")
+    .update({ status: "AVAILABLE" })
+    .eq("id", tx.id);
+
+  if (txUpdateError) {
+    // Compensating rollback
+    await client
+      .from("wallets")
+      .update({
+        available_balance: initialBalance,
+        total_earned: initialEarned,
+      })
+      .eq("id", wallet.id);
+    return { ok: false, error: txUpdateError.message };
+  }
+
+  return { ok: true, newBalance };
+}
+
+export async function refundTaskEscrow(
+  taskId: string,
+  businessId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; refundedAmount?: number; newBalance?: number }> {
+  const client = clientOverride ?? supabaseAdmin ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_refund_task_escrow", {
+        p_task_id: taskId,
+        p_business_id: businessId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return {
+            ok: true,
+            refundedAmount: data.refunded_amount,
+            newBalance: data.new_balance ?? data.newBalance,
+          };
+        }
+        return { ok: false, error: data.error || "Escrow refund failed" };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback: fetch task and refund
+  const { data: task, error: taskError } = await client
+    .from("tasks")
+    .select("id, status, reward_amount, reward_currency, escrow_locked, repository_id")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (taskError || !task) {
+    return { ok: false, error: "Task not found" };
+  }
+
+  if (task.status !== "open" && task.status !== "canceled") {
+    return { ok: false, error: "Only open or canceled tasks can have escrow refunded" };
+  }
+
+  if (!task.escrow_locked) {
+    return { ok: false, error: "Escrow is not locked for this task" };
+  }
+
+  // Tenant isolation: business user's company must match task repository owner
+  if (task.repository_id) {
+    const { data: businessUser, error: userError } = await client
+      .from("users")
+      .select("company")
+      .eq("id", businessId)
+      .maybeSingle();
+
+    if (userError || !businessUser || !businessUser.company) {
+      return { ok: false, error: "Business user not found or has no company assigned" };
+    }
+
+    const { data: taskRepository, error: repoError } = await client
+      .from("repositories")
+      .select("owner")
+      .eq("id", task.repository_id)
+      .maybeSingle();
+
+    if (repoError || !taskRepository) {
+      return { ok: false, error: "Task repository not found" };
+    }
+
+    if (businessUser.company.trim().toLowerCase() !== taskRepository.owner.trim().toLowerCase()) {
+      return { ok: false, error: "Forbidden: task repository does not belong to your company" };
+    }
+  }
+
+  const { data: activeClaims } = await client
+    .from("claims")
+    .select("id")
+    .eq("task_id", taskId)
+    .eq("status", "active")
+    .gt("expires_at", new Date().toISOString());
+
+  if (activeClaims && activeClaims.length > 0) {
+    return { ok: false, error: "Cannot refund escrow while an active claim exists on task" };
+  }
+
+  const bounty = task.reward_amount ?? 0;
+  const { error: taskUpdateError } = await client
+    .from("tasks")
+    .update({ status: "canceled", escrow_locked: false })
+    .eq("id", taskId);
+
+  if (taskUpdateError) return { ok: false, error: taskUpdateError.message };
+
+  if (bounty > 0) {
+    const { data: wallet } = await client
+      .from("wallets")
+      .select("id, available_balance")
+      .eq("user_id", businessId)
+      .maybeSingle();
+
+    if (wallet) {
+      const newBalance = (wallet.available_balance ?? 0) + bounty;
+      await client
+        .from("wallets")
+        .update({ available_balance: newBalance })
+        .eq("id", wallet.id);
+
+      await client.from("wallet_transactions").insert({
+        wallet_id: wallet.id,
+        task_id: taskId,
+        amount: bounty,
+        currency: task.reward_currency ?? "INR",
+        type: "ESCROW_REFUND",
+        status: "COMPLETED",
+      });
+
+      return { ok: true, refundedAmount: bounty, newBalance };
+    }
+  }
+
+  return { ok: true, refundedAmount: bounty };
 }
 
 export async function getUserByGithubId(
@@ -963,6 +1223,27 @@ export async function claimTask(
 ): Promise<Claim | null> {
   const client = clientOverride ?? db();
   if (!client) return null;
+
+  // Canonical path: atomic_claim_task RPC (lazy-expires stale claims, enforces uniqueness atomically)
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_claim_task", {
+        p_task_id: taskId,
+        p_user_id: userId,
+      });
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return data.claim ?? null;
+        }
+        return null;
+      }
+    } catch {
+      // Fallback to direct query
+    }
+  }
+
+  // Fallback: direct claim with expiry check
   const { data: existing } = await client
     .from("claims")
     .select()
@@ -1000,6 +1281,7 @@ export async function getClaimsByUser(
     .from("claims")
     .select()
     .eq("user_id", userId)
+    .gt("expires_at", new Date().toISOString())
     .order("claimed_at", { ascending: false });
   if (error) return [];
   return data ?? [];

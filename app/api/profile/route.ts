@@ -29,7 +29,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const dbClient = supabaseAdmin ?? supabase;
+    const dbClient = supabase;
     const profile = await getFullProfile(session.userId, dbClient);
 
     return NextResponse.json({
@@ -87,7 +87,7 @@ export async function PATCH(request: Request) {
     if (followers_count !== undefined) updates.followers_count = followers_count;
     if (public_repos_count !== undefined) updates.public_repos_count = public_repos_count;
 
-    const dbClient = supabaseAdmin ?? supabase;
+    const dbClient = supabase;
 
     // Update base user fields
     const updatedUser = await upsertUser(
