@@ -8,6 +8,7 @@ import {
   getRepositoryById,
   getActiveClaimForTask,
   getActiveClaimForUserAndTask,
+  getLatestSubmissionForClaim,
   submitPR,
 } from '@/lib/db-operations';
 
@@ -110,12 +111,26 @@ export async function submitPrAction(
 
   const prNumber = url.match(/\/pull\/(\d+)/)?.[1] ?? null;
 
+  // Check for existing submissions for this claim to determine revision lineage
+  const previousSubmission = await getLatestSubmissionForClaim(claim.id);
+  if (previousSubmission && previousSubmission.pr_status === 'pending') {
+    return {
+      ok: false,
+      message: 'You already have an active submission pending review for this claim.',
+    };
+  }
+
+  const nextRevision = previousSubmission ? (previousSubmission.revision_number ?? 1) + 1 : 1;
+  const parentId = previousSubmission ? previousSubmission.id : null;
+
   const submission = await submitPR({
     task_id: taskId,
     user_id: session.userId,
     claim_id: claim.id,
     pr_url: url,
     pr_number: prNumber,
+    revision_number: nextRevision,
+    parent_submission_id: parentId,
   });
   if (!submission) {
     return { ok: false, message: 'Submission failed. Please try again.' };
@@ -124,6 +139,8 @@ export async function submitPrAction(
   revalidatePath('/dashboard/developer', 'page');
   return {
     ok: true,
-    message: prNumber ? `PR #${prNumber} submitted for verification.` : 'PR submitted for verification.',
+    message: prNumber
+      ? `PR #${prNumber} (rev ${nextRevision}) submitted for verification.`
+      : `PR (rev ${nextRevision}) submitted for verification.`,
   };
 }

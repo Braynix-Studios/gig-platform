@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClientWithCookies } from "@/lib/supabaseClient";
+import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
 import { debitWallet } from "@/lib/db-operations";
 
@@ -125,9 +125,27 @@ export async function PATCH(request: Request) {
     }
 
     const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
-    if (!isTestEnv && typeof supabase.rpc === "function") {
+    const adminClient = supabaseAdmin ?? supabase;
+
+    // Verify ownership: Transaction must belong to the caller's wallet
+    const { data: txRecord } = await adminClient
+      .from("wallet_transactions")
+      .select("id, wallet_id, status, wallets(user_id)")
+      .eq("id", transaction_id)
+      .maybeSingle();
+
+    if (!txRecord) {
+      return NextResponse.json({ error: "Withdrawal transaction not found" }, { status: 404 });
+    }
+
+    const walletOwnerId = (txRecord as any)?.wallets?.user_id;
+    if (walletOwnerId && walletOwnerId !== session.userId && session.role !== "business") {
+      return NextResponse.json({ error: "Forbidden: transaction does not belong to caller" }, { status: 403 });
+    }
+
+    if (!isTestEnv && typeof adminClient.rpc === "function") {
       try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc("atomic_confirm_withdrawal", {
+        const { data: rpcData, error: rpcError } = await adminClient.rpc("atomic_confirm_withdrawal", {
           p_transaction_id: transaction_id,
           p_payout_status: cleanStatus,
         });

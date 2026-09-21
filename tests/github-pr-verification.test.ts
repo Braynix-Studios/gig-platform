@@ -24,6 +24,7 @@ const { mockDbOperations, mockSession } = vi.hoisted(() => {
     updateTaskStatus: vi.fn(),
     expireOtherClaimsForTask: vi.fn(),
     getClaimById: vi.fn(),
+    getLatestSubmissionForClaim: vi.fn(),
   };
   return { mockDbOperations, mockSession };
 });
@@ -367,4 +368,72 @@ describe('Tier 1 & Tier 2: GitHub PR Verification & Repository Binding', () => {
     expect(result.message).toMatch(/created before the issue was claimed/i);
     expect(mockDbOperations.createContribution).not.toHaveBeenCalled();
   });
+
+  // Feature: Submission Revision Lineage
+  it('test_revision_lineage_increments_revision_on_changes_requested: increments revision_number and sets parent_submission_id', async () => {
+    mockDbOperations.getLatestSubmissionForClaim.mockResolvedValueOnce({
+      id: 'sub-prev-1',
+      pr_status: 'changes_requested',
+      revision_number: 1,
+    });
+    mockDbOperations.submitPR.mockResolvedValueOnce({
+      id: 'sub-2',
+      revision_number: 2,
+      parent_submission_id: 'sub-prev-1',
+    });
+
+    const formData = new FormData();
+    formData.set('taskId', 'task-1');
+    formData.set('prUrl', 'https://github.com/octocat/spoon-knife/pull/42');
+
+    const result = await submitPrAction({ ok: false }, formData);
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('(rev 2)');
+    expect(mockDbOperations.submitPR).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision_number: 2,
+        parent_submission_id: 'sub-prev-1',
+      }),
+    );
+  });
+
+  it('test_evidence_snapshot_persisted_on_verification: passes commit SHA, issue number, and repo id to createContribution', async () => {
+    mockSession.userId = 'biz-1';
+    mockSession.role = 'business';
+
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        number: 42,
+        state: 'closed',
+        merged: true,
+        user: { id: 12345, login: 'octocat-dev' },
+        title: 'Fix issue #42',
+        body: 'Closes #42',
+        created_at: new Date().toISOString(),
+        merge_commit_sha: 'commit-sha-abc-123',
+      }),
+    });
+
+    const formData = new FormData();
+    formData.set('submissionId', 'sub-1');
+    formData.set('decision', 'approve');
+
+    const result = await reviewSubmissionAction({ ok: false }, formData);
+
+    expect(result.ok).toBe(true);
+    expect(mockDbOperations.createContribution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        github_repo_id: 'octocat/spoon-knife',
+        github_issue_number: 42,
+        pr_number: 42,
+        pr_author_github_id: '12345',
+        merge_commit_sha: 'commit-sha-abc-123',
+        verification_source: 'github_api',
+      }),
+    );
+  });
 });
+
