@@ -753,9 +753,8 @@ export async function syncGithubProfile(
   if (data?.bio !== undefined) {
     updatePayload.bio = data.bio;
   }
-  if (data?.company !== undefined) {
-    updatePayload.company = data.company;
-  }
+  // Note: We deliberately do NOT sync external GitHub company into users.company,
+  // as users.company is the internal tenant boundary identifier for business accounts.
   if (data?.location !== undefined) {
     updatePayload.location = data.location;
   }
@@ -887,6 +886,7 @@ export async function countActiveClaimsForTasks(
     .from("claims")
     .select("id", { count: "exact", head: true })
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .in("task_id", taskIds);
   if (error) return 0;
   return count ?? 0;
@@ -1019,6 +1019,21 @@ export async function getActiveClaimForUserAndTask(
     .eq("user_id", userId)
     .eq("status", "active")
     .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+export async function getClaimById(
+  claimId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<Claim | null> {
+  const client = clientOverride ?? db();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("claims")
+    .select()
+    .eq("id", claimId)
     .maybeSingle();
   if (error) return null;
   return data;

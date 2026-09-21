@@ -23,6 +23,7 @@ const { mockDbOperations, mockSession } = vi.hoisted(() => {
     creditReward: vi.fn(),
     updateTaskStatus: vi.fn(),
     expireOtherClaimsForTask: vi.fn(),
+    getClaimById: vi.fn(),
   };
   return { mockDbOperations, mockSession };
 });
@@ -54,10 +55,10 @@ describe('Tier 1 & Tier 2: GitHub PR Verification & Repository Binding', () => {
     mockGetSession.mockImplementation(async () => mockSession);
 
     mockDbOperations.getTaskById.mockResolvedValue({
-
       id: 'task-1',
       repository_id: 'repo-1',
       title: 'Fix issue #42',
+      issue_url: 'https://github.com/octocat/spoon-knife/issues/42',
       status: 'open',
       reward_amount: 1000,
       reward_currency: 'INR',
@@ -78,8 +79,26 @@ describe('Tier 1 & Tier 2: GitHub PR Verification & Repository Binding', () => {
       status: 'active',
     });
 
-    mockDbOperations.getFullProfile.mockResolvedValue({
-      user: { id: 'biz-1', role: 'business', company: 'octocat' },
+    mockDbOperations.getClaimById.mockResolvedValue({
+      id: 'claim-1',
+      task_id: 'task-1',
+      user_id: 'dev-user-1',
+      status: 'active',
+      claimed_at: new Date(Date.now() - 3600000).toISOString(),
+    });
+
+    mockDbOperations.getFullProfile.mockImplementation(async (userId: string) => {
+      if (userId === 'biz-1') {
+        return { user: { id: 'biz-1', role: 'business', company: 'octocat' } };
+      }
+      return {
+        user: {
+          id: 'dev-user-1',
+          role: 'developer',
+          github_id: '12345',
+          github_handle: 'octocat-dev',
+        },
+      };
     });
 
     mockDbOperations.getSubmissionById.mockResolvedValue({
@@ -254,5 +273,98 @@ describe('Tier 1 & Tier 2: GitHub PR Verification & Repository Binding', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/does not belong to your company|mismatch|repository/i);
+  });
+
+  // Feature: PR author verification
+  it('test_r1e5_review_rejects_pr_from_different_author: business approval rejected if PR author does not match claiming developer', async () => {
+    mockSession.userId = 'biz-1';
+    mockSession.role = 'business';
+
+    // GitHub returns PR created by attacker 'bob-hacker' instead of 'octocat-dev'
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        number: 42,
+        state: 'closed',
+        merged: true,
+        user: { id: 99999, login: 'bob-hacker' },
+        title: 'Fix issue #42',
+        body: 'Closes #42',
+        created_at: new Date().toISOString(),
+      }),
+    });
+
+    const formData = new FormData();
+    formData.set('submissionId', 'sub-1');
+    formData.set('decision', 'approve');
+
+    const result = await reviewSubmissionAction({ ok: false }, formData);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/PR author.*does not match/i);
+    expect(mockDbOperations.createContribution).not.toHaveBeenCalled();
+  });
+
+  // Feature: Task issue ↔ PR reference verification
+  it('test_r1e6_review_rejects_pr_without_linked_issue_reference: business approval rejected if PR body/title does not reference the task issue', async () => {
+    mockSession.userId = 'biz-1';
+    mockSession.role = 'business';
+
+    // GitHub returns PR created by correct developer but implementing unrelated feature (no reference to #42)
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        number: 42,
+        state: 'closed',
+        merged: true,
+        user: { id: 12345, login: 'octocat-dev' },
+        title: 'Unrelated refactor of logging',
+        body: 'Resolves issue #999 instead',
+        created_at: new Date().toISOString(),
+      }),
+    });
+
+    const formData = new FormData();
+    formData.set('submissionId', 'sub-1');
+    formData.set('decision', 'approve');
+
+    const result = await reviewSubmissionAction({ ok: false }, formData);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/does not reference the linked task issue #42/i);
+    expect(mockDbOperations.createContribution).not.toHaveBeenCalled();
+  });
+
+  // Feature: Claim timing verification
+  it('test_r1e7_review_rejects_pre_existing_pr: business approval rejected if PR was created before the issue was claimed', async () => {
+    mockSession.userId = 'biz-1';
+    mockSession.role = 'business';
+
+    // GitHub returns PR created 2 days ago, but claim was created 1 hour ago
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        number: 42,
+        state: 'closed',
+        merged: true,
+        user: { id: 12345, login: 'octocat-dev' },
+        title: 'Fix issue #42',
+        body: 'Closes #42',
+        created_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+      }),
+    });
+
+    const formData = new FormData();
+    formData.set('submissionId', 'sub-1');
+    formData.set('decision', 'approve');
+
+    const result = await reviewSubmissionAction({ ok: false }, formData);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/created before the issue was claimed/i);
+    expect(mockDbOperations.createContribution).not.toHaveBeenCalled();
   });
 });

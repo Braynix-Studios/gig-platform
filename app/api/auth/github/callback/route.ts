@@ -82,9 +82,10 @@ export async function GET(request: NextRequest) {
 
           const githubHandle = cleanGithubHandle(rawHandle);
 
-          // Resolve role: prefer an existing profile row (so a business user who
-          // connects GitHub keeps their role), then user_metadata, then developer.
-          let role = user.user_metadata?.role || 'developer';
+          // Resolve role: prefer an existing profile row (so an established business user who
+          // connects GitHub keeps their role). Any new OAuth user strictly defaults to 'developer'.
+          // Business roles require trusted onboarding/membership, not self-asserted OAuth metadata.
+          let role = 'developer';
           const existingByGithub = githubId
             ? await getUserByGithubId(githubId, dbClient)
             : null;

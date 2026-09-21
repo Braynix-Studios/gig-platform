@@ -1002,7 +1002,7 @@ function TabContent({
                   Last recalculated Today
                 </p>
                 <div style={{ height: 8, backgroundColor: "rgba(255, 255, 255, 0.12)", borderRadius: 9999, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: "98.4%", backgroundColor: MINT, borderRadius: 9999 }} />
+                  <div style={{ height: "100%", width: `${Math.min(100, Math.max(0, Number(overriddenStats.reputationScore) || 0))}%`, backgroundColor: MINT, borderRadius: 9999 }} />
                 </div>
                 <p style={{ margin: "8px 0 0", fontSize: 10, color: "#71717b" }}>
                   {overriddenStats.reputationFooter}

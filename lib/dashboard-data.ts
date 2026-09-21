@@ -302,12 +302,7 @@ export function getWorkspaceMetrics(): WorkspaceMetric[] {
 }
 
 export function getBacklogTasks(): BacklogTask[] {
-  return [
-    { id: 'task-b1', title: 'Next.js 16 Turbopack Bundle Analyzer & Cache Optimizer', repo: 'enterprise/core-runtime', budget: '$1,200 USDC', applicantsCount: 3, status: 'Active', assignee: 'Alex Rivers', priority: 'Critical', targetRelease: 'v0.2.0-rc1' },
-    { id: 'task-b2', title: 'Zero-Knowledge Proof Merkle Tree Verification Engine', repo: 'enterprise/zk-contracts', budget: '$2,500 USDC', applicantsCount: 6, status: 'Open for Bids', priority: 'High', targetRelease: 'v0.2.0' },
-    { id: 'task-b3', title: 'Automated Pull Request Proof-of-Work Evidence Auditor', repo: 'enterprise/audit-suite', budget: '$950 USDC', applicantsCount: 1, status: 'Reviewing', assignee: 'Alex Rivers', priority: 'High', targetRelease: 'v0.1.9' },
-    { id: 'task-b4', title: 'Multi-Region Distributed SQLite Sync & LibSQL Replica Gate', repo: 'enterprise/storage-mesh', budget: '$3,200 USDC', applicantsCount: 0, status: 'Queued', priority: 'Standard', targetRelease: 'v0.3.0' },
-  ];
+  return [];
 }
 
 export function getTalentPool(): TalentContributor[] {
@@ -597,7 +592,8 @@ export async function getIssuePoolData(
         getClaimsByUser(userId, client),
         getSubmissionsByUser(userId, client),
       ]);
-      const active = claims.filter((c) => c.status === 'active');
+      const nowIso = new Date().toISOString();
+      const active = claims.filter((c) => c.status === 'active' && (!c.expires_at || c.expires_at > nowIso));
       claimedByMe = active.length;
       claimedTotal = claimedByMe;
       active.forEach((c) => claimedTaskIds.add(c.task_id));

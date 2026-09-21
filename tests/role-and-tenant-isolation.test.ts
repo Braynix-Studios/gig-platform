@@ -242,4 +242,33 @@ describe('Tier 1 & Tier 2: Role Integrity, Auth Governance & Tenant Isolation', 
     // In a secured system, company update via service role backdoor is completely removed
     expect(companyUpdate).toBeUndefined();
   });
+
+  // Feature: GitHub profile sync cannot overwrite company tenant boundary
+  it('test_github_profile_sync_does_not_overwrite_company: syncGithubProfile preserves internal company tenant', async () => {
+    // Import syncGithubProfile
+    const { syncGithubProfile } = await import('@/lib/db-operations');
+
+    // Mock fetch for GitHub user profile
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 12345,
+        login: 'octocat',
+        company: 'MaliciousExternalOrg',
+        bio: 'Legit bio',
+      }),
+    } as any);
+
+    await syncGithubProfile('user-1', 'fake-token', '12345', 'octocat', mockSupabase as any);
+
+    const updateCalls = mockQueryBuilder.update.mock.calls;
+    const lastUpdate = updateCalls[updateCalls.length - 1]?.[0];
+
+    // Assert that company was NOT included in the update payload
+    expect(lastUpdate?.company).toBeUndefined();
+    expect(lastUpdate?.bio).toBe('Legit bio');
+
+    fetchSpy.mockRestore();
+  });
 });

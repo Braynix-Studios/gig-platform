@@ -132,11 +132,12 @@ describe('syncGithubProfile', () => {
       username: 'The Octocat',
       avatar_url: 'https://avatars.githubusercontent.com/u/583231?v=4',
       bio: 'Open source mascot',
-      company: '@github',
       location: 'San Francisco',
       followers_count: 12000,
       public_repos_count: 8,
     });
+    // Invariant: External GitHub profile sync must NOT overwrite internal company tenant boundary
+    expect(updatePayloadCapture.company).toBeUndefined();
   });
 
   it('falls back to public endpoint https://api.github.com/users/:handle when providerToken is absent', async () => {

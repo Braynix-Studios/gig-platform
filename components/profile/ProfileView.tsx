@@ -327,7 +327,7 @@ export default function ProfileView({
                   Reputation Score
                 </p>
                 <p style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 900, color: GREEN }}>
-                  98.4 / 100
+                  {profile.contributions_count > 0 ? `${Math.min(100, profile.contributions_count * 15)} / 100` : "— / 100"}
                 </p>
               </div>
             </div>
