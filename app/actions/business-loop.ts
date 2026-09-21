@@ -25,6 +25,7 @@ interface GitHubPRInfo {
   title?: string;
   body?: string | null;
   created_at?: string;
+  merge_commit_sha?: string | null;
 }
 
 async function fetchGitHubPR(owner: string, repo: string, prNumber: string): Promise<GitHubPRInfo | null> {
@@ -189,6 +190,7 @@ export async function reviewSubmissionAction(
     return { ok: false, message: 'Could not mark the submission as merged or status already changed.' };
   }
 
+  const issueNumMatch = task.issue_url ? task.issue_url.match(/\/issues\/(\d+)/) : null;
   const contribution = await createContribution({
     user_id: submission.user_id,
     task_id: submission.task_id,
@@ -196,6 +198,12 @@ export async function reviewSubmissionAction(
     status: 'verified',
     reviewer: company,
     merged_at: new Date().toISOString(),
+    github_repo_id: repo.github_repo_id || `${repo.owner}/${repo.name}`,
+    github_issue_number: issueNumMatch ? parseInt(issueNumMatch[1], 10) : null,
+    pr_number: prInfo.number ? Number(prInfo.number) : (prNumber ? parseInt(prNumber, 10) : null),
+    pr_author_github_id: prInfo.user?.id ? String(prInfo.user.id) : devGithubId,
+    merge_commit_sha: prInfo.merge_commit_sha || null,
+    verification_source: 'github_api',
   });
   if (!contribution) {
     return { ok: false, message: 'Could not record the verified contribution.' };

@@ -66,6 +66,8 @@ export interface Submission {
   pr_url: string;
   pr_number?: string | null;
   pr_status: string;
+  revision_number?: number;
+  parent_submission_id?: string | null;
   submitted_at?: string | null;
 }
 
@@ -78,6 +80,12 @@ export interface Contribution {
   reviewer?: string | null;
   merged_at?: string | null;
   created_at?: string | null;
+  github_repo_id?: string | null;
+  github_issue_number?: number | null;
+  pr_number?: number | null;
+  pr_author_github_id?: string | null;
+  merge_commit_sha?: string | null;
+  verification_source?: string;
 }
 
 export interface Wallet {
@@ -153,6 +161,8 @@ export interface SubmitPRInput {
   claim_id: string;
   pr_url: string;
   pr_number?: string | null;
+  revision_number?: number;
+  parent_submission_id?: string | null;
 }
 
 export interface CreateContributionInput {
@@ -162,6 +172,12 @@ export interface CreateContributionInput {
   status?: string;
   reviewer?: string | null;
   merged_at?: string | null;
+  github_repo_id?: string | null;
+  github_issue_number?: number | null;
+  pr_number?: number | null;
+  pr_author_github_id?: string | null;
+  merge_commit_sha?: string | null;
+  verification_source?: string;
 }
 
 export interface SubmissionReview {
@@ -1146,21 +1162,46 @@ export async function getClaimedTasksByUser(
   }));
 }
 
+export async function getLatestSubmissionForClaim(
+  claimId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<Submission | null> {
+  const client = clientOverride ?? db();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("submissions")
+    .select()
+    .eq("claim_id", claimId)
+    .order("revision_number", { ascending: false })
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
 export async function submitPR(
   input: SubmitPRInput,
 ): Promise<Submission | null> {
   const client = db();
   if (!client) return null;
+  const insertPayload: Record<string, any> = {
+    task_id: input.task_id,
+    user_id: input.user_id,
+    claim_id: input.claim_id,
+    pr_url: input.pr_url,
+    pr_number: input.pr_number ?? null,
+    pr_status: "pending",
+  };
+  if (input.revision_number !== undefined) {
+    insertPayload.revision_number = input.revision_number;
+  }
+  if (input.parent_submission_id !== undefined) {
+    insertPayload.parent_submission_id = input.parent_submission_id;
+  }
   const { data, error } = await client
     .from("submissions")
-    .insert({
-      task_id: input.task_id,
-      user_id: input.user_id,
-      claim_id: input.claim_id,
-      pr_url: input.pr_url,
-      pr_number: input.pr_number ?? null,
-      pr_status: "pending",
-    })
+    .insert(insertPayload)
     .select()
     .maybeSingle();
   if (error) return null;
@@ -1227,16 +1268,24 @@ export async function createContribution(
 ): Promise<Contribution | null> {
   const client = clientOverride ?? db();
   if (!client) return null;
+  const insertPayload: Record<string, any> = {
+    user_id: input.user_id,
+    task_id: input.task_id,
+    submission_id: input.submission_id,
+    status: input.status ?? "verified",
+    reviewer: input.reviewer ?? null,
+    merged_at: input.merged_at ?? null,
+  };
+  if (input.github_repo_id !== undefined) insertPayload.github_repo_id = input.github_repo_id;
+  if (input.github_issue_number !== undefined) insertPayload.github_issue_number = input.github_issue_number;
+  if (input.pr_number !== undefined) insertPayload.pr_number = input.pr_number;
+  if (input.pr_author_github_id !== undefined) insertPayload.pr_author_github_id = input.pr_author_github_id;
+  if (input.merge_commit_sha !== undefined) insertPayload.merge_commit_sha = input.merge_commit_sha;
+  if (input.verification_source !== undefined) insertPayload.verification_source = input.verification_source;
+
   const { data, error } = await client
     .from("contributions")
-    .insert({
-      user_id: input.user_id,
-      task_id: input.task_id,
-      submission_id: input.submission_id,
-      status: input.status ?? "verified",
-      reviewer: input.reviewer ?? null,
-      merged_at: input.merged_at ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .maybeSingle();
 
