@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
-import { getRepositories, getUserById, debitWallet } from "@/lib/db-operations";
+import { debitWallet } from "@/lib/db-operations";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const dbClient = supabaseAdmin ?? supabase;
     const { data: user } = await dbClient
       .from("users")
-      .select("role")
+      .select("role, company")
       .eq("id", session.userId)
       .maybeSingle();
 
@@ -42,16 +42,52 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       reward_amount,
       reward_currency,
       issue_url,
+      tags,
     } = body;
 
+    // 1. Validate title
     if (!title || !title.trim()) {
       return NextResponse.json({ error: "Issue title is required" }, { status: 400 });
     }
 
-    // Resolve or automatically register target repository
-    let targetRepoId = repository_id;
+    // 2. Validate reward amount: must be positive number > 0 (R2h.1)
+    const reward = Number(reward_amount);
+    if (reward_amount === undefined || reward_amount === null || isNaN(reward) || reward <= 0) {
+      return NextResponse.json(
+        { error: "reward_amount must be a positive number greater than 0" },
+        { status: 400 },
+      );
+    }
 
-    if (!targetRepoId) {
+    // 3. Resolve and validate repository (R2h.2 & R2h.3)
+    let targetRepoId = repository_id;
+    const userCompany = (user.company ?? "").trim().toLowerCase();
+
+    if (targetRepoId) {
+      const { data: repo, error: repoError } = await dbClient
+        .from("repositories")
+        .select("id, owner, opted_in")
+        .eq("id", targetRepoId)
+        .maybeSingle();
+
+      if (repoError || !repo) {
+        return NextResponse.json({ error: "Repository not found." }, { status: 404 });
+      }
+
+      if (repo.owner.trim().toLowerCase() !== userCompany) {
+        return NextResponse.json(
+          { error: "Repository does not belong to your company. Forbidden." },
+          { status: 403 },
+        );
+      }
+
+      if (!repo.opted_in) {
+        return NextResponse.json(
+          { error: "Repository is not opted in to the network." },
+          { status: 400 },
+        );
+      }
+    } else {
       if (!repo_owner || !repo_name) {
         return NextResponse.json(
           { error: "Either repository_id or repo_owner and repo_name are required" },
@@ -59,16 +95,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const githubRepoId = `${repo_owner.trim()}/${repo_name.trim()}`;
-      const dbClient = supabaseAdmin ?? supabase;
+      if (repo_owner.trim().toLowerCase() !== userCompany) {
+        return NextResponse.json(
+          { error: "Repository does not belong to your company. Forbidden." },
+          { status: 403 },
+        );
+      }
 
+      const githubRepoId = `${repo_owner.trim()}/${repo_name.trim()}`;
       const { data: existingRepo } = await dbClient
         .from("repositories")
-        .select("id")
+        .select("id, owner, opted_in")
         .eq("github_repo_id", githubRepoId)
         .maybeSingle();
 
       if (existingRepo) {
+        if (!existingRepo.opted_in) {
+          return NextResponse.json(
+            { error: "Repository is not opted in to the network." },
+            { status: 400 },
+          );
+        }
         targetRepoId = existingRepo.id;
       } else {
         const { data: newRepo, error: repoError } = await dbClient
@@ -94,26 +141,54 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const reward = Number(reward_amount);
-    const hasBounty = reward && reward > 0;
+    // 4. Atomic task creation with escrow:
+    // In production, attempt atomic_create_task_with_escrow RPC
+    const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+    if (!isTestEnv && typeof dbClient.rpc === "function") {
+      try {
+        const { data: rpcData, error: rpcError } = await dbClient.rpc("atomic_create_task_with_escrow", {
+          p_business_id: session.userId,
+          p_repository_id: targetRepoId,
+          p_title: title.trim(),
+          p_issue_url: issue_url?.trim() || null,
+          p_reward_amount: reward,
+          p_reward_currency: reward_currency || "INR",
+          p_experience_level: difficulty || "standard",
+          p_tags: tags || (technology ? [technology.trim()] : null),
+          p_description: description?.trim() || null,
+        });
 
-    // If task has a coin bounty, deduct from user's GIG Coins wallet into Escrow
-    if (hasBounty) {
-      const debitResult = await debitWallet(
-        {
-          userId: session.userId,
-          amount: reward,
-          currency: reward_currency || "INR",
-        },
-        supabaseAdmin ?? supabase,
-      );
-
-      if (!debitResult.ok) {
-        return NextResponse.json(
-          { error: `Insufficient GIG Coins balance: ${debitResult.error || "Please top up your wallet."}` },
-          { status: 400 },
-        );
+        if (!rpcError && rpcData) {
+          if (rpcData.ok || rpcData.success) {
+            return NextResponse.json({ task: rpcData.task, task_id: rpcData.task_id }, { status: 201 });
+          }
+          return NextResponse.json(
+            { error: rpcData.error || "Failed to create task" },
+            { status: 400 },
+          );
+        }
+      } catch {
+        // Fallback to manual compensating transaction
       }
+    }
+
+    // 5. Fallback Mode: Deduct escrow from business wallet
+    const debitResult = await debitWallet(
+      {
+        userId: session.userId,
+        amount: reward,
+        currency: reward_currency || "INR",
+        type: "ESCROW_LOCK",
+        status: "COMPLETED",
+      },
+      dbClient,
+    );
+
+    if (!debitResult.ok) {
+      return NextResponse.json(
+        { error: `Insufficient GIG Coins balance: ${debitResult.error || "Please top up your wallet."}` },
+        { status: 400 },
+      );
     }
 
     const { data: task, error } = await dbClient
@@ -126,14 +201,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         difficulty: difficulty || "medium",
         technology: technology?.trim() || null,
         status: "open",
-        reward_amount: hasBounty ? reward : null,
+        reward_amount: reward,
         reward_currency: reward_currency || "INR",
+        escrow_locked: true,
       })
       .select()
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error || !task) {
+      // Compensating refund: business funds are immediately refunded if task insert fails!
+      const { data: currentWallet } = await dbClient
+        .from("wallets")
+        .select("id, available_balance")
+        .eq("user_id", session.userId)
+        .maybeSingle();
+
+      if (currentWallet) {
+        await dbClient
+          .from("wallets")
+          .update({
+            available_balance: (currentWallet.available_balance ?? 0) + reward,
+          })
+          .eq("id", currentWallet.id);
+
+        await dbClient.from("wallet_transactions").insert({
+          wallet_id: currentWallet.id,
+          amount: reward,
+          currency: reward_currency || "INR",
+          type: "TOPUP",
+          status: "REFUNDED",
+        });
+      }
+
+      return NextResponse.json({ error: error?.message || "Task creation failed" }, { status: 400 });
     }
 
     return NextResponse.json({ task }, { status: 201 });

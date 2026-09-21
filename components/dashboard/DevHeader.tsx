@@ -75,7 +75,7 @@ export default function DevHeader({ displayName, handle, activeTab, githubHandle
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <MintPill>TIER 2 CONTRIBUTOR · GIG VERIFIED</MintPill>
-          <MintPill dot>ON-CHAIN RECORD SYNCED</MintPill>
+          <MintPill dot>VERIFIED</MintPill>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

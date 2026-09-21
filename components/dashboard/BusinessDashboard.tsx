@@ -123,36 +123,21 @@ export interface BusinessDashboardProps {
 }
 
 const FALLBACK: BusinessDashboardData = {
-  displayName: "Enterprise Sponsor",
-  displayEmail: "biz@gig.dev",
-  company: "Acme Enterprise Labs",
-  bio: "Building next-generation open source distributed infrastructure and high-assurance web platforms.",
-  location: "San Francisco, CA",
+  displayName: "Business Account",
+  displayEmail: "",
+  company: null,
+  bio: null,
+  location: null,
   avatar_url: null,
   metrics: [
-    { label: "Active Engineering Bounties", value: "8", subtext: "4 in progress, 4 accepting bids", highlight: true },
-    { label: "Vetted Talent Pool", value: "42", subtext: "Cryptographically certified contributors" },
-    { label: "Escrow Vault Secured", value: "$32,500", subtext: "100% smart contract collateralized" },
-    { label: "Avg PR Merge Velocity", value: "4.2 hrs", subtext: "Automated verification test pass" },
+    { label: "Active Engineering Bounties", value: "—", subtext: "No active bounties yet", highlight: true },
+    { label: "Vetted Talent Pool", value: "—", subtext: "No contributors yet" },
+    { label: "Escrow Vault Secured", value: "—", subtext: "Held in escrow" },
+    { label: "Avg PR Merge Velocity", value: "—", subtext: "No data yet" },
   ],
-  backlogTasks: [
-    { id: "task-b1", title: "Next.js 16 Turbopack Bundle Analyzer & Cache Optimizer", repo: "enterprise/core-runtime", budget: "$1,200 USDC", applicantsCount: 3, status: "Active", assignee: "Alex Rivers", priority: "Critical", targetRelease: "v0.2.0-rc1" },
-    { id: "task-b2", title: "Zero-Knowledge Proof Merkle Tree Verification Engine", repo: "enterprise/zk-contracts", budget: "$2,500 USDC", applicantsCount: 6, status: "Open for Bids", priority: "High", targetRelease: "v0.2.0" },
-    { id: "task-b3", title: "Automated Pull Request Proof-of-Work Evidence Auditor", repo: "enterprise/audit-suite", budget: "$950 USDC", applicantsCount: 1, status: "Reviewing", assignee: "Alex Rivers", priority: "High", targetRelease: "v0.1.9" },
-    { id: "task-b4", title: "Multi-Region Distributed SQLite Sync & LibSQL Replica Gate", repo: "enterprise/storage-mesh", budget: "$3,200 USDC", applicantsCount: 0, status: "Queued", priority: "Standard", targetRelease: "v0.3.0" },
-  ],
-  talentPool: [
-    { id: "dev-01", name: "Alex Rivers", githubHandle: "@alexrivers-gig", reputation: 98.4, mergedPRs: 24, specialties: ["Next.js 16", "React 19", "HMAC Auth", "TypeScript"], status: "Assigned" },
-    { id: "dev-02", name: "Elena Rostova", githubHandle: "@erostova-crypto", reputation: 99.1, mergedPRs: 38, specialties: ["Rust", "ZK-SNARKs", "Elliptic Curve Cryptography"], status: "Top Contributor" },
-    { id: "dev-03", name: "Marcus Chen", githubHandle: "@mchen-sys", reputation: 96.8, mergedPRs: 19, specialties: ["Distributed Systems", "Go", "LibSQL / SQLite"], status: "Available" },
-    { id: "dev-04", name: "Priya Patel", githubHandle: "@ppatel-cloud", reputation: 97.5, mergedPRs: 31, specialties: ["Security Auditing", "CI/CD Pipelines", "Docker / K8s"], status: "Available" },
-  ],
-  disbursals: [
-    { id: "dis-882", date: "2026-09-12", recipient: "Alex Rivers", taskTitle: "Implement HMAC-SHA256 Session Middleware Gate", amount: "$1,500 USDC", status: "Settled", txHash: "0x8f2a...4b19" },
-    { id: "dis-879", date: "2026-09-10", recipient: "Elena Rostova", taskTitle: "Circuit Verification Module for Proof Generation", amount: "$2,500 USDC", status: "Settled", txHash: "0x4d19...3c22" },
-    { id: "dis-865", date: "2026-09-08", recipient: "Alex Rivers", taskTitle: "Migrate Client Auth State to Async HTTP-Only Cookies", amount: "$1,200 USDC", status: "Settled", txHash: "0x3c7e...9a42" },
-    { id: "dis-851", date: "2026-09-02", recipient: "Marcus Chen", taskTitle: "High-Concurrency Database Connection Pooling Engine", amount: "$1,800 USDC", status: "Settled", txHash: "0x9a7b...8821" },
-  ],
+  backlogTasks: [],
+  talentPool: [],
+  disbursals: [],
 };
 
 function createEmptyBizIssuePool(): IssuePoolData {
@@ -699,7 +684,7 @@ function TabContent({
     case "profile": {
       const [shareToast, setShareToast] = useState(false);
       const cleanGithub = cleanGithubHandle(profileState.githubHandle);
-      const companyDisplayName = profileState.company || profileState.displayName || "Acme Enterprise Labs";
+      const companyDisplayName = profileState.company || profileState.displayName || "Business Account";
       const companyInitials = companyDisplayName
         .split(" ")
         .map((w) => w[0])
@@ -727,11 +712,7 @@ function TabContent({
         }
       };
 
-      const displayDisbursals: BizDisbursal[] = disbursals.length > 0 ? disbursals : [
-        { id: "dis-882", date: "2026-09-12", recipient: "Alex Rivers", taskTitle: "Fix stale redirect marker in hidden Activity", amount: "$1,500 USDC", status: "Settled", txHash: "0x8f2a...4b19" },
-        { id: "dis-879", date: "2026-09-10", recipient: "Elena Rostova", taskTitle: "Implement HMAC-SHA256 Session Gate", amount: "$2,500 USDC", status: "Settled", txHash: "0x4d19...3c22" },
-        { id: "dis-865", date: "2026-09-08", recipient: "Alex Rivers", taskTitle: "Turbopack Cache Invalidation Optimization", amount: "$1,200 USDC", status: "Settled", txHash: "0x3c7e...9a42" },
-      ];
+      const displayDisbursals: BizDisbursal[] = disbursals;
 
       return (
         <section id="biz-profile" style={{ marginTop: 24, scrollMarginTop: 24, display: "flex", flexDirection: "column", gap: 24 }}>
@@ -872,7 +853,7 @@ function TabContent({
                   <div style={{ height: "100%", width: "100%", backgroundColor: MINT, borderRadius: 9999 }} />
                 </div>
                 <p style={{ margin: "8px 0 0", fontSize: 10, color: "#71717b" }}>
-                  Multi-Sig Escrow Active · Real-time verification
+                  Escrow Active
                 </p>
               </div>
             </div>
@@ -991,7 +972,7 @@ function TabContent({
                     }}
                   >
                     <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: MINT }} />
-                    <span>Active Enterprise Sponsor · Multi-Sig Escrow Active</span>
+                    <span>Business Account</span>
                   </div>
                 </div>
               </div>
@@ -1109,10 +1090,10 @@ function TabContent({
                 ESCROW VAULT SECURED
               </span>
               <span style={{ fontSize: "2.25rem", fontWeight: 800, color: GREEN, lineHeight: 1.1 }}>
-                $32,500 USDC
+                —
               </span>
               <span style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
-                100% smart contract collateralized
+                Funds held in escrow
               </span>
             </div>
           </div>
@@ -1139,7 +1120,7 @@ function TabContent({
                 </div>
                 <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
                   <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.55 }}>
-                    Deterministic smart contract collateralization guarantees automated payouts once PR acceptance tests pass.
+                    Funds are held in escrow and released upon verified contribution.
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
@@ -1421,7 +1402,7 @@ export default function BusinessDashboard({ data = FALLBACK, issuePool, reviews 
   // Company profile state
   const initialGithubHandle = cleanGithubHandle(data.githubHandle) || "";
   const [profileState, setProfileState] = useState<ProfileState>({
-    company: data.company || data.displayName || FALLBACK.company || "Acme Enterprise Labs",
+    company: data.company || data.displayName || FALLBACK.company || "",
     displayName: data.displayName || FALLBACK.displayName,
     displayEmail: data.displayEmail || FALLBACK.displayEmail,
     githubHandle: initialGithubHandle,

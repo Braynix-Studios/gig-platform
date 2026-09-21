@@ -63,8 +63,8 @@ export interface DeveloperStats {
 }
 
 const DEV_FALLBACK: DeveloperStats = {
-  reputationScore: '98.4',
-  reputationBadge: 'TOP 2%',
+  reputationScore: '0',
+  reputationBadge: 'NEW',
   reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
   verifiedContributions: '24',
   contributionsFooter: 'Across 6 production open-source repositories',
@@ -223,8 +223,8 @@ export async function getDeveloperDashboard(userId: string) {
 
   const stats = profile?.user
     ? {
-        reputationScore: String(98.4),
-        reputationBadge: 'TOP 2%',
+        reputationScore: '0',
+        reputationBadge: 'NEW',
         reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
         verifiedContributions: String(profile.contributions_count),
         contributionsFooter:
@@ -294,10 +294,10 @@ export interface EscrowDisbursal {
 
 export function getWorkspaceMetrics(): WorkspaceMetric[] {
   return [
-    { label: 'Active Engineering Bounties', value: '8', subtext: '4 in progress, 4 accepting bids', highlight: true },
-    { label: 'Vetted Talent Pool', value: '42', subtext: 'Cryptographically certified contributors' },
-    { label: 'Escrow Vault Secured', value: '$32,500', subtext: '100% smart contract collateralized' },
-    { label: 'Avg PR Merge Velocity', value: '4.2 hrs', subtext: 'Automated verification test pass' },
+    { label: 'Active Engineering Bounties', value: '—', subtext: '4 in progress, 4 accepting bids', highlight: true },
+    { label: 'Vetted Talent Pool', value: '—', subtext: 'Certified contributors' },
+    { label: 'Escrow Vault Secured', value: '—', subtext: 'Held in escrow' },
+    { label: 'Avg PR Merge Velocity', value: '—', subtext: 'Automated verification test pass' },
   ];
 }
 
@@ -311,21 +311,11 @@ export function getBacklogTasks(): BacklogTask[] {
 }
 
 export function getTalentPool(): TalentContributor[] {
-  return [
-    { id: 'dev-01', name: 'Alex Rivers', githubHandle: '@alexrivers-gig', reputation: 98.4, mergedPRs: 24, specialties: ['Next.js 16', 'React 19', 'HMAC Auth', 'TypeScript'], status: 'Assigned' },
-    { id: 'dev-02', name: 'Elena Rostova', githubHandle: '@erostova-crypto', reputation: 99.1, mergedPRs: 38, specialties: ['Rust', 'ZK-SNARKs', 'Elliptic Curve Cryptography'], status: 'Top Contributor' },
-    { id: 'dev-03', name: 'Marcus Chen', githubHandle: '@mchen-sys', reputation: 96.8, mergedPRs: 19, specialties: ['Distributed Systems', 'Go', 'LibSQL / SQLite'], status: 'Available' },
-    { id: 'dev-04', name: 'Priya Patel', githubHandle: '@ppatel-cloud', reputation: 97.5, mergedPRs: 31, specialties: ['Security Auditing', 'CI/CD Pipelines', 'Docker / K8s'], status: 'Available' },
-  ];
+  return [];
 }
 
 export function getRecentDisbursals(): EscrowDisbursal[] {
-  return [
-    { id: 'dis-882', date: '2026-09-12', recipient: 'Alex Rivers', taskTitle: 'Implement HMAC-SHA256 Session Middleware Gate', amount: '$1,500 USDC', status: 'Settled', txHash: '0x8f2a...4b19' },
-    { id: 'dis-879', date: '2026-09-10', recipient: 'Elena Rostova', taskTitle: 'Circuit Verification Module for Proof Generation', amount: '$2,500 USDC', status: 'Settled', txHash: '0x4d19...3c22' },
-    { id: 'dis-865', date: '2026-09-08', recipient: 'Alex Rivers', taskTitle: 'Migrate Client Auth State to Async HTTP-Only Cookies', amount: '$1,200 USDC', status: 'Settled', txHash: '0x3c7e...9a42' },
-    { id: 'dis-851', date: '2026-09-02', recipient: 'Marcus Chen', taskTitle: 'High-Concurrency Database Connection Pooling Engine', amount: '$1,800 USDC', status: 'Settled', txHash: '0x9a7b...8821' },
-  ];
+  return [];
 }
 
 export interface BusinessDashboard {
@@ -352,8 +342,8 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
 
   let githubHandle: string | null = null;
   let openTasks: Task[] = [];
-  let displayName = 'Enterprise Sponsor';
-  let displayEmail = 'biz@gig.dev';
+  let displayName = '';
+  let displayEmail = '';
   let company: string | null = null;
   let bio: string | null = null;
   let location: string | null = null;
@@ -361,11 +351,8 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
 
   if (client) {
     try {
-      // getUser and the task list are independent: resolve in parallel.
-      const [userRes, tasks] = await Promise.all([
-        client.auth.getUser(),
-        getOpenTasks({}, client),
-      ]);
+      // R2c: Fetch user and profile first (sequentially), then tasks scoped to company repos.
+      const userRes = await client.auth.getUser();
       const user = userRes.data?.user;
       if (user) {
         githubHandle = cleanGithubHandle(user.user_metadata?.github_handle || user.user_metadata?.user_name);
@@ -387,8 +374,20 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
           const rowHandle = cleanGithubHandle(userRow.github_handle);
           if (rowHandle) githubHandle = rowHandle;
         }
+
+        // Only fetch tasks for this company's repositories; if no company, leave openTasks empty.
+        if (company) {
+          const repos = await getRepositories({ owner: company }, client);
+          const repoIds = repos.map((r) => r.id);
+          if (repoIds.length > 0) {
+            // Fetch tasks for each repo and flatten; use first repo as filter entry point
+            const taskResults = await Promise.all(
+              repoIds.map((repoId) => getOpenTasks({ repositoryId: repoId }, client))
+            );
+            openTasks = taskResults.flat();
+          }
+        }
       }
-      openTasks = tasks;
     } catch {
       // fall through to fallback
     }
@@ -409,7 +408,7 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
       : [];
 
   return {
-    displayName,
+    displayName: displayName || 'Business Account',
     displayEmail,
     githubHandle,
     company,

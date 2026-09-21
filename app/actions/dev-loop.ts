@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session';
 import {
   claimTask,
   getTaskById,
+  getRepositoryById,
   getActiveClaimForTask,
   getActiveClaimForUserAndTask,
   submitPR,
@@ -28,6 +29,9 @@ export async function claimIssueAction(
   }
   if (session.role !== 'developer') {
     return { ok: false, message: 'Only developers can claim issues.' };
+  }
+  if (!session.githubId) {
+    return { ok: false, message: 'Connect your GitHub account before claiming issues.' };
   }
 
   const taskId = formData.get('taskId');
@@ -80,6 +84,23 @@ export async function submitPrAction(
       ok: false,
       message: 'Enter a valid GitHub pull-request URL, e.g. https://github.com/org/repo/pull/12',
     };
+  }
+
+  // Parse PR URL to extract owner/repo (R1f)
+  const prMatch = url.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/);
+  if (!prMatch) {
+    return { ok: false, message: 'Could not parse GitHub PR URL.' };
+  }
+  const [, prOwner, prRepo] = prMatch;
+
+  // Load task and repository to validate PR belongs to task repo
+  const task = await getTaskById(taskId);
+  if (!task) return { ok: false, message: 'Task not found.' };
+  const repo = await getRepositoryById(task.repository_id);
+  if (!repo) return { ok: false, message: 'Task repository not found.' };
+
+  if (prOwner.toLowerCase() !== repo.owner.toLowerCase() || prRepo.toLowerCase() !== repo.name.toLowerCase()) {
+    return { ok: false, message: `PR must belong to the task repository: ${repo.owner}/${repo.name}` };
   }
 
   const claim = await getActiveClaimForUserAndTask(taskId, session.userId);

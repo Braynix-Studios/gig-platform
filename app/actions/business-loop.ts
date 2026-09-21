@@ -15,6 +15,31 @@ import {
   expireOtherClaimsForTask,
 } from '@/lib/db-operations';
 
+interface GitHubPRInfo {
+  merged: boolean;
+  state: string;
+  head: { repo: { full_name: string } | null };
+  user: { login: string } | null;
+  number: number;
+}
+
+async function fetchGitHubPR(owner: string, repo: string, prNumber: string): Promise<GitHubPRInfo | null> {
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GIG-Platform/1.0',
+      },
+      next: { revalidate: 0 }, // no cache
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export interface BusinessReviewState {
   ok: boolean;
   message?: string;
@@ -37,7 +62,7 @@ export async function reviewSubmissionAction(
   if (typeof submissionId !== 'string' || !submissionId) {
     return { ok: false, message: 'Missing submission reference.' };
   }
-  if (decision !== 'approve' && decision !== 'reject') {
+  if (decision !== 'approve' && decision !== 'reject' && decision !== 'changes_requested') {
     return { ok: false, message: 'Invalid decision.' };
   }
 
@@ -64,19 +89,48 @@ export async function reviewSubmissionAction(
     return { ok: false, message: 'This submission does not belong to your company.' };
   }
 
+  if (decision === 'changes_requested') {
+    const updated = await updateSubmissionStatus(submission.id, 'changes_requested');
+    if (!updated) {
+      return { ok: false, message: 'Could not update submission status or status already changed.' };
+    }
+    revalidatePath('/dashboard/business', 'page');
+    revalidatePath('/dashboard/developer', 'page');
+    return { ok: true, message: 'Changes requested. The developer retains their active claim to submit an updated PR.' };
+  }
+
   if (decision === 'reject') {
     const updated = await updateSubmissionStatus(submission.id, 'rejected');
     if (!updated) {
-      return { ok: false, message: 'Could not reject the submission.' };
+      return { ok: false, message: 'Could not reject the submission or status already changed.' };
     }
-    await setClaimStatus(submission.claim_id, 'expired');
+    await setClaimStatus(submission.claim_id, 'expired', 'active');
     revalidatePath('/dashboard/business', 'page');
     return { ok: true, message: 'Submission rejected and the developer lock was released.' };
   }
 
-  const updated = await updateSubmissionStatus(submission.id, 'merged');
+  // --- GitHub PR verification (R1e + R1f) ---
+  const prMatch = submission.pr_url?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!prMatch) {
+    return { ok: false, message: 'Submission has an invalid or missing PR URL.' };
+  }
+  const [, prOwner, prRepo, prNumber] = prMatch;
+  // R1f: PR must belong to the task's repository
+  if (prOwner.toLowerCase() !== repo.owner.toLowerCase() || prRepo.toLowerCase() !== repo.name.toLowerCase()) {
+    return { ok: false, message: `PR does not belong to the task repository: ${repo.owner}/${repo.name}` };
+  }
+  const prInfo = await fetchGitHubPR(repo.owner, repo.name, prNumber);
+  if (prInfo === null) {
+    return { ok: false, message: 'PR not found on GitHub or repository is private. Ensure the PR exists and is publicly accessible.' };
+  }
+  if (prInfo.merged !== true) {
+    return { ok: false, message: 'PR is not yet merged on GitHub. Wait for the PR to be merged before approving.' };
+  }
+  // --- End GitHub verification ---
+
+  const updated = await updateSubmissionStatus(submission.id, 'merged', 'pending');
   if (!updated) {
-    return { ok: false, message: 'Could not mark the submission as merged.' };
+    return { ok: false, message: 'Could not mark the submission as merged or status already changed.' };
   }
 
   const contribution = await createContribution({
@@ -105,10 +159,10 @@ export async function reviewSubmissionAction(
 
   await setClaimStatus(submission.claim_id, 'completed');
   // Competitive racing resolution: mark task completed and expire competitor claims
-  await updateTaskStatus(task.id, 'closed');
+  await updateTaskStatus(task.id, 'closed', 'open');
   await expireOtherClaimsForTask(task.id, submission.claim_id);
 
   revalidatePath('/dashboard/business', 'page');
   revalidatePath('/dashboard/developer', 'page');
-  return { ok: true, message: `PR verified — ${amount} ${task.reward_currency || 'INR'} paid out to the developer.` };
+  return { ok: true, message: `PR approved — reward of ${amount} ${task.reward_currency || 'INR'} queued as PENDING verification.` };
 }

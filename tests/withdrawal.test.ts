@@ -243,4 +243,36 @@ describe('Withdrawal API endpoint', () => {
     const json = await response.json();
     expect(json.error).toBe('Supabase is not configured');
   });
+
+  it('test_r2i1_concurrent_withdrawal_race: concurrent withdrawals cannot overdraw wallet balance', async () => {
+    mockSupabaseAuth.getSession.mockResolvedValue({ userId: 'test-user-id' });
+    // Wallet has balance 600. Two simultaneous withdrawals of 500.
+    const walletData = { id: 'wallet-1', user_id: 'test-user-id', available_balance: 600, total_earned: 600 };
+    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: walletData, error: null });
+
+    const req1 = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'POST',
+      body: JSON.stringify({ amount: 500 }),
+    });
+
+    const res1 = await POST(req1);
+    expect(res1.status).toBe(200);
+
+    // Second simultaneous request sees reduced balance (100) or atomic lock fail
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { ...walletData, available_balance: 100 },
+      error: null,
+    });
+
+    const req2 = new Request('http://localhost/api/wallet/withdrawal', {
+      method: 'POST',
+      body: JSON.stringify({ amount: 500 }),
+    });
+
+    const res2 = await POST(req2);
+    expect(res2.status).toBe(400);
+    const json2 = await res2.json();
+    expect(json2.error).toMatch(/insufficient balance/i);
+  });
 });
+

@@ -935,7 +935,7 @@ export default function ProfileView({
                           border: `1px solid ${MINT_BDR}`,
                         }}
                       >
-                        VERIFIED ON-CHAIN
+                        VERIFIED
                       </span>
                     </div>
                   ))

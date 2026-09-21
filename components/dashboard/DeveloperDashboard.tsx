@@ -114,42 +114,26 @@ export interface DevDashboardProps {
 }
 
 const FALLBACK: DeveloperDashboardData = {
-  displayName: "ALEX RIVERS",
-  handle: "alex.rivers@gig.dev",
+  displayName: "Developer",
+  handle: "",
   stats: {
-    reputationScore: "98.4",
-    reputationBadge: "TOP 2%",
-    reputationFooter: "0–100 Weighted Score · Top 2% Network",
-    verifiedContributions: "24",
-    contributionsFooter: "Across 6 production open-source repositories",
-    lockedTasks: "2",
-    lockedFooter: "₹4,700 in locked escrow · 48h lock active",
-    walletBalance: "₹4,850",
+    reputationScore: "0",
+    reputationBadge: "NEW",
+    reputationFooter: "0–100 Weighted Score",
+    verifiedContributions: "0",
+    contributionsFooter: "No contributions yet",
+    lockedTasks: "0",
+    lockedFooter: "No locked escrow",
+    walletBalance: "₹0",
     walletFooter: "Ready for instant UPI bank withdrawal (Min ₹500)",
   },
-  tasks: [
-    { id: "task-1", title: "Fix stale redirect marker in hidden Activity", repo: "vercel/next.js", status: "Verified", assignee: "Alex Rivers", lockedAmount: "₹2,500", lockExpiry: "48h" },
-    { id: "task-2", title: "Implement HMAC-SHA256 Session Middleware Gate", repo: "gig/auth-core", status: "In Progress", assignee: "Alex Rivers", lockedAmount: "₹2,200", lockExpiry: "48h" },
-  ],
-  transactions: [
-    { id: "txn-1", date: "2026-09-14", description: "Bounty Disbursal - Next.js PR #98006", amount: "₹500", type: "credit", status: "Completed" },
-    { id: "txn-2", date: "2026-09-10", description: "Bounty Disbursal - Auth Core PR #4521", amount: "₹1,200", type: "credit", status: "Completed" },
-    { id: "txn-3", date: "2026-09-05", description: "UPI Withdrawal to Bank", amount: "₹2,000", type: "debit", status: "Completed" },
-    { id: "txn-4", date: "2026-09-01", description: "Bounty Disbursal - Storage Mesh PR #1023", amount: "₹1,800", type: "credit", status: "Completed" },
-  ],
-  badges: [
-    { label: "Next.js L2 Specialist", description: "Verified expertise in Next.js 15+ App Router", earned: "2026-08-15" },
-    { label: "React 19 Early Adopter", description: "Production deployment with React 19 RC", earned: "2026-07-22" },
-    { label: "TypeScript Champion", description: "100+ PRs with strict TypeScript compliance", earned: "2026-06-10" },
-  ],
-  verifiedPRs: [
-    { id: "pr-1", repo: "vercel/next.js", title: "Fix stale redirect marker in hidden Activity", mergedAt: "2026-09-12", linesChanged: "+352 / -3" },
-    { id: "pr-2", repo: "vercel/next.js", title: "Improve Turbopack cache invalidation", mergedAt: "2026-08-28", linesChanged: "+124 / -12" },
-    { id: "pr-3", repo: "gig/auth-core", title: "Implement HMAC-SHA256 Session Middleware", mergedAt: "2026-08-10", linesChanged: "+89 / -4" },
-  ],
-  walletTxCount: 4,
+  tasks: [],
+  transactions: [],
+  badges: [],
+  verifiedPRs: [],
+  walletTxCount: 0,
   // Profile fields for editing
-  username: "alex.rivers",
+  username: "",
   avatar_url: null,
   github_handle: null,
   bio: null,
@@ -922,7 +906,7 @@ function TabContent({
                 }}
               >
                 <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: MINT, display: "inline-block" }} />
-                ON-CHAIN RECORD SYNCED
+                CONTRIBUTION VERIFIED
               </span>
             </div>
             <div>
@@ -1125,7 +1109,7 @@ function TabContent({
                       maxWidth: 640,
                     }}
                   >
-                    {profileState.bio || "Full-stack developer building high-assurance distributed systems with Next.js and TypeScript. Verified contributor in smart contract escrow and web runtime architectures."}
+                    {profileState.bio || "Full-stack developer building high-assurance distributed systems with Next.js and TypeScript. Verified contributor in web runtime architectures."}
                   </p>
 
                   <div

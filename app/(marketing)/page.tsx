@@ -225,7 +225,7 @@ export default function Home() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
-                  <span>Instant UPI &amp; blockchain proof</span>
+                  <span>Instant UPI &amp; audit proof</span>
                 </div>
               </div>
             </div>
@@ -302,10 +302,10 @@ export default function Home() {
                     <path d="m9 12 2 2 4-4"></path>
                   </svg>
                 </div>
-                <h3 className="feature-title">Blockchain-Backed Audit Layer</h3>
-                <p className="feature-desc">GIG records and verifies eligible payment events through a blockchain-backed audit layer. Every payout generates a permanent GIG Payment Proof containing the withdrawal ID, transaction hash, and timestamp. All personal identifiers remain off-chain for total privacy.</p>
+                <h3 className="feature-title">Cryptographic Audit Ledger</h3>
+                <p className="feature-desc">GIG records and verifies eligible payment events through a tamper-evident audit ledger. Every payout generates a permanent GIG Payment Proof containing the withdrawal ID, ledger reference, and timestamp. All personal identifiers remain protected for total privacy.</p>
                 <div className="feature-proof-tag">
-                  <span>Zero PII on-chain · Cryptographically verifiable receipt</span>
+                  <span>Zero PII exposed · Cryptographically verifiable receipt</span>
                 </div>
               </div>
               <div className="feature-card">

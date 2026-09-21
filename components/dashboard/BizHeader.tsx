@@ -75,7 +75,7 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           </span>
           <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: 9999, backgroundColor: MINT, display: "inline-block" }} />
-            Tier 1 Enterprise Sponsor · Multi-Sig Escrow Active
+            Business Sponsor · Escrow Active
           </span>
         </div>
         <h1

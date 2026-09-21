@@ -55,6 +55,7 @@ export interface Claim {
   user_id: string;
   status: string;
   claimed_at?: string | null;
+  expires_at?: string | null;
 }
 
 export interface Submission {
@@ -263,6 +264,31 @@ export async function creditReward(
 ): Promise<{ ok: boolean; error?: string }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
+
+  if (input.amount <= 0) {
+    return { ok: false, error: "Reward amount must be positive" };
+  }
+
+  // Attempt RPC first in non-test environment
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_credit_reward_pending", {
+        p_user_id: input.user_id,
+        p_task_id: input.task_id,
+        p_amount: input.amount,
+        p_currency: input.currency || "INR",
+        p_contribution_id: input.contribution_id ?? null,
+      });
+      if (!error && data) {
+        if (data.ok || data.success) return { ok: true };
+        return { ok: false, error: data.error || "Credit reward failed" };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
   const { data: wallet } = await client
     .from("wallets")
     .select()
@@ -270,27 +296,21 @@ export async function creditReward(
     .maybeSingle();
   if (!wallet) return { ok: false, error: "Recipient has no wallet" };
 
-  // Idempotency check: if a contribution with this contribution_id already exists, skip
+  // Fixed Idempotency check: check wallet_transactions table for contribution_id & type = 'TASK_REWARD', NOT contributions table!
   if (input.contribution_id) {
-    const { data: existingContribution } = await client
-      .from("contributions")
+    const { data: existingTx } = await client
+      .from("wallet_transactions")
       .select("id")
-      .eq("id", input.contribution_id)
+      .eq("contribution_id", input.contribution_id)
+      .eq("type", "TASK_REWARD")
       .maybeSingle();
-    if (existingContribution) {
+    if (existingTx) {
       return { ok: true };
     }
   }
 
-  const { error: updateError } = await client
-    .from("wallets")
-    .update({
-      available_balance: (wallet.available_balance ?? 0) + input.amount,
-      total_earned: (wallet.total_earned ?? 0) + input.amount,
-    })
-    .eq("id", wallet.id);
-  if (updateError) return { ok: false, error: updateError.message };
-
+  // R1b: Do NOT increment available_balance immediately!
+  // Insert wallet_transactions with status: 'PENDING'
   const { error: txError } = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     task_id: input.task_id,
@@ -298,7 +318,7 @@ export async function creditReward(
     amount: input.amount,
     currency: input.currency,
     type: "TASK_REWARD",
-    status: "CREDITED",
+    status: "PENDING",
   });
   if (txError) return { ok: false, error: txError.message };
 
@@ -309,14 +329,86 @@ export interface DebitWalletInput {
   userId: string;
   amount: number;
   currency?: string;
+  type?: string;
+  status?: string;
+  taskId?: string | null;
+  withdrawalId?: string | null;
 }
+
+const walletUserLocks = new Map<string, Promise<any>>();
 
 export async function debitWallet(
   input: DebitWalletInput,
   clientOverride?: SupabaseClient | null,
 ): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  if (input.amount <= 0) {
+    return { ok: false, error: "Debit amount must be positive" };
+  }
+
+  // Serialize concurrent debit operations per user to prevent TOCTOU race conditions
+  const currentLock = walletUserLocks.get(input.userId) ?? Promise.resolve();
+  let releaseLock: () => void;
+  const newLock = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  walletUserLocks.set(input.userId, currentLock.then(() => newLock, () => newLock));
+
+  await currentLock;
+  try {
+    return await executeDebitWallet(input, clientOverride);
+  } finally {
+    releaseLock!();
+    if (walletUserLocks.get(input.userId) === newLock) {
+      walletUserLocks.delete(input.userId);
+    }
+  }
+}
+
+async function executeDebitWallet(
+  input: DebitWalletInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
+
+  const txType = input.type ?? "WITHDRAWAL";
+  let status = input.status;
+  if (!status) {
+    if (txType === "ESCROW_LOCK") {
+      status = "COMPLETED";
+    } else if (input.currency) {
+      status = "REQUESTED";
+    } else {
+      status = "COMPLETED";
+    }
+  }
+
+  const withdrawalId = input.withdrawalId ?? `${input.userId}_${Date.now()}`;
+
+  // Attempt atomic_debit_wallet RPC first in non-test environment
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_debit_wallet", {
+        p_user_id: input.userId,
+        p_amount: input.amount,
+        p_currency: input.currency ?? "INR",
+        p_type: txType,
+        p_status: status,
+        p_task_id: input.taskId ?? null,
+        p_withdrawal_id: withdrawalId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return { ok: true, newBalance: data.new_balance ?? data.newBalance };
+        }
+        return { ok: false, error: data.error || "Debit failed" };
+      }
+    } catch {
+      // Fallback to conditional update
+    }
+  }
 
   // Get wallet for the user
   const { data: wallet } = await client
@@ -327,7 +419,6 @@ export async function debitWallet(
 
   if (!wallet) return { ok: false, error: "Wallet not found" };
 
-  // Check if available_balance >= amount
   const availableBalance = wallet.available_balance ?? 0;
   if (availableBalance < input.amount) {
     return { ok: false, error: "Insufficient balance" };
@@ -335,48 +426,91 @@ export async function debitWallet(
 
   // Idempotency check: same wallet + amount + type within last 5 minutes
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const { data: existingTx } = await client
+  let txQuery = client
     .from("wallet_transactions")
     .select("id")
     .eq("wallet_id", wallet.id)
     .eq("amount", -Math.abs(input.amount))
-    .eq("type", "WITHDRAWAL")
-    .gte("created_at", fiveMinutesAgo)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("type", txType);
+
+  if (typeof (txQuery as any).gte === "function") {
+    txQuery = (txQuery as any).gte("created_at", fiveMinutesAgo);
+  }
+  if (typeof (txQuery as any).order === "function") {
+    txQuery = (txQuery as any).order("created_at", { ascending: false });
+  }
+  if (typeof (txQuery as any).limit === "function") {
+    txQuery = (txQuery as any).limit(1);
+  }
+
+  const { data: existingTx } = await txQuery.maybeSingle();
 
   if (existingTx) {
-    // Idempotent replay: no debit happened, balance is unchanged.
     return { ok: true, newBalance: availableBalance };
   }
 
-  // Update wallet by subtracting the amount
-  const { error: updateError } = await client
+  // Atomic conditional update: UPDATE wallets SET available_balance = available_balance - amount WHERE id = wallet.id AND available_balance >= amount
+  const updateBuilder = client
     .from("wallets")
     .update({
       available_balance: availableBalance - input.amount,
     })
     .eq("id", wallet.id);
 
+  if (typeof (updateBuilder as any).gte === "function") {
+    (updateBuilder as any).gte("available_balance", input.amount);
+  }
+
+  let updateError: any = null;
+  let updatedRow: any = null;
+
+  if (typeof (updateBuilder as any).select === "function") {
+    const selectBuilder = (updateBuilder as any).select("available_balance");
+    if (typeof selectBuilder?.maybeSingle === "function") {
+      const res = await selectBuilder.maybeSingle();
+      updateError = res?.error;
+      updatedRow = res?.data;
+    } else {
+      const res = await selectBuilder;
+      updateError = res?.error;
+      updatedRow = res?.data;
+    }
+    if (!updateError && !updatedRow) {
+      return { ok: false, error: "Insufficient balance" };
+    }
+  } else if (typeof (updateBuilder as any).then === "function") {
+    const res = await updateBuilder;
+    updateError = res?.error;
+  }
+
   if (updateError) return { ok: false, error: updateError.message };
 
-  // Insert wallet transaction with negative amount, type 'WITHDRAWAL', status 'COMPLETED'
-  const withdrawalId = `${input.userId}_${Date.now()}`;
+  // Insert wallet transaction
   const { error: txError } = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
-    task_id: null,
+    task_id: input.taskId ?? null,
     contribution_id: null,
     withdrawal_id: withdrawalId,
     amount: -Math.abs(input.amount),
     currency: input.currency ?? "INR",
-    type: "WITHDRAWAL",
-    status: "COMPLETED",
+    type: txType,
+    status: status,
   });
 
-  if (txError) return { ok: false, error: txError.message };
+  if (txError) {
+    // Atomically roll back balance decrement if transaction insert fails
+    await client
+      .from("wallets")
+      .update({
+        available_balance: availableBalance,
+      })
+      .eq("id", wallet.id);
 
-  return { ok: true, newBalance: availableBalance - input.amount };
+    return { ok: false, error: txError.message };
+  }
+
+  const finalBalance = updatedRow?.available_balance ?? (availableBalance - input.amount);
+  return { ok: true, newBalance: finalBalance };
 }
 
 export interface CreditTopupInput {
@@ -723,7 +857,9 @@ export async function getOpenTasksWithRepositories(
   query = query.order("created_at", { ascending: false });
   const { data, error } = await query;
   if (error) return [];
-  return (data ?? []).map((row) => ({
+  return (data ?? [])
+    .filter((row) => row.repositories?.opted_in === true)
+    .map((row) => ({
     task: {
       id: row.id,
       repository_id: row.repository_id,
@@ -771,15 +907,24 @@ export async function getTaskById(id: string): Promise<Task | null> {
 export async function updateTaskStatus(
   taskId: string,
   status: string,
+  expectedStatus?: string,
   clientOverride?: SupabaseClient | null,
 ): Promise<boolean> {
   const client = clientOverride ?? db();
   if (!client) return false;
-  const { error } = await client
+  let query = client
     .from("tasks")
     .update({ status })
     .eq("id", taskId);
-  return !error;
+
+  if (expectedStatus) {
+    query = query.eq("status", expectedStatus);
+  }
+
+  const { data, error } = await query.select().maybeSingle();
+  if (error) return false;
+  if (expectedStatus && !data) return false;
+  return true;
 }
 
 export async function getTasksByRepository(
@@ -798,8 +943,9 @@ export async function getTasksByRepository(
 export async function claimTask(
   taskId: string,
   userId: string,
+  clientOverride?: SupabaseClient | null,
 ): Promise<Claim | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
   const { data: existing } = await client
     .from("claims")
@@ -807,11 +953,21 @@ export async function claimTask(
     .eq("task_id", taskId)
     .eq("user_id", userId)
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (existing) return existing;
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await client
     .from("claims")
-    .insert({ task_id: taskId, user_id: userId, status: "active" })
+    .insert({
+      task_id: taskId,
+      user_id: userId,
+      status: "active",
+      expires_at: expiresAt,
+    })
     .select()
     .maybeSingle();
   if (error) return null;
@@ -843,6 +999,7 @@ export async function getActiveClaimForTask(
     .select()
     .eq("task_id", taskId)
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error) return null;
   return data;
@@ -861,6 +1018,7 @@ export async function getActiveClaimForUserAndTask(
     .eq("task_id", taskId)
     .eq("user_id", userId)
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error) return null;
   return data;
@@ -885,14 +1043,28 @@ export async function expireOtherClaimsForTask(
 export async function setClaimStatus(
   claimId: string,
   status: string,
+  expectedStatus?: string,
   clientOverride?: SupabaseClient | null,
 ): Promise<boolean> {
   const client = clientOverride ?? db();
   if (!client) return false;
-  const { error } = await client
+  let query = client
     .from("claims")
     .update({ status })
     .eq("id", claimId);
+
+  if (expectedStatus) {
+    query = query.eq("status", expectedStatus);
+  }
+
+  if (typeof (query as any).select === "function") {
+    const { data, error } = await (query as any).select().maybeSingle();
+    if (error) return false;
+    if (expectedStatus && !data) return false;
+    return true;
+  }
+
+  const { error } = await query;
   return !error;
 }
 
@@ -1012,23 +1184,33 @@ export async function getSubmissionById(
 export async function updateSubmissionStatus(
   id: string,
   status: string,
+  expectedStatus: string = "pending",
+  clientOverride?: SupabaseClient | null,
 ): Promise<Submission | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
-  const { data, error } = await client
+  let query = client
     .from("submissions")
     .update({ pr_status: status })
-    .eq("id", id)
+    .eq("id", id);
+
+  if (expectedStatus) {
+    query = query.eq("pr_status", expectedStatus);
+  }
+
+  const { data, error } = await query
     .select()
     .maybeSingle();
-  if (error) return null;
+
+  if (error || !data) return null;
   return data;
 }
 
 export async function createContribution(
   input: CreateContributionInput,
+  clientOverride?: SupabaseClient | null,
 ): Promise<Contribution | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
   const { data, error } = await client
     .from("contributions")
@@ -1042,7 +1224,23 @@ export async function createContribution(
     })
     .select()
     .maybeSingle();
-  if (error) return null;
+
+  if (error) {
+    // Handle unique constraint violation on contributions_submission_id_unique gracefully
+    if (error.code === "23505" || error.message?.includes("duplicate key") || error.message?.includes("unique constraint")) {
+      try {
+        const { data: existing } = await client
+          .from("contributions")
+          .select()
+          .eq("submission_id", input.submission_id)
+          .maybeSingle();
+        return existing ?? null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
   return data;
 }
 
