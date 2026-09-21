@@ -30,10 +30,10 @@ export interface SidebarStats {
   counts?: Record<string, string>;
 }
 
-const DEV_FALLBACK_NAME = 'Alex Rivers';
-const BIZ_FALLBACK_NAME = 'Enterprise Sponsor';
-const DEV_FALLBACK_EMAIL = 'dev@gig.dev';
-const BIZ_FALLBACK_EMAIL = 'biz@gig.dev';
+const DEV_FALLBACK_NAME = 'Developer';
+const BIZ_FALLBACK_NAME = 'Business Sponsor';
+const DEV_FALLBACK_EMAIL = '';
+const BIZ_FALLBACK_EMAIL = '';
 
 function isUsableEmail(email: unknown): email is string {
   return (
@@ -71,15 +71,15 @@ export function normalizeHandle(
 
 function getDeveloperStatsFallback() {
   return {
-    reputationScore: '98.4',
-    reputationBadge: 'TOP 2%',
-    reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
-    verifiedContributions: '24',
-    contributionsFooter: 'Across 6 production open-source repositories',
-    lockedTasks: '2',
-    lockedFooter: '\u20b94,700 in locked escrow \u00b7 48h lock active',
-    walletBalance: '\u20b94,850',
-    walletFooter: 'Ready for instant UPI bank withdrawal (Min \u20b9500)',
+    reputationScore: '0',
+    reputationBadge: 'NEW',
+    reputationFooter: 'Reputation score based on verified PR contributions',
+    verifiedContributions: '0',
+    contributionsFooter: 'Verified open-source contributions',
+    lockedTasks: '0',
+    lockedFooter: 'Locked escrow',
+    walletBalance: '\u20b90',
+    walletFooter: 'Ready for UPI bank withdrawal (Min \u20b9500)',
   };
 }
 

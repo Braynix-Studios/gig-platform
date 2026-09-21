@@ -55,6 +55,7 @@ export interface Claim {
   user_id: string;
   status: string;
   claimed_at?: string | null;
+  expires_at?: string | null;
 }
 
 export interface Submission {
@@ -111,14 +112,21 @@ export interface Profile {
 export interface UpsertUserInput {
   id?: string;
   github_id?: string | null;
+  github_handle?: string | null;
   username?: string;
   email?: string;
   avatar_url?: string | null;
+  bio?: string | null;
+  company?: string | null;
+  location?: string | null;
+  followers_count?: number | null;
+  public_repos_count?: number | null;
   role?: string;
 }
 
 export interface GitHubProfileData {
   login: string;
+  id?: number;
   name?: string | null;
   avatar_url?: string | null;
   bio?: string | null;
@@ -256,6 +264,31 @@ export async function creditReward(
 ): Promise<{ ok: boolean; error?: string }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
+
+  if (input.amount <= 0) {
+    return { ok: false, error: "Reward amount must be positive" };
+  }
+
+  // Attempt RPC first in non-test environment
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_credit_reward_pending", {
+        p_user_id: input.user_id,
+        p_task_id: input.task_id,
+        p_amount: input.amount,
+        p_currency: input.currency || "INR",
+        p_contribution_id: input.contribution_id ?? null,
+      });
+      if (!error && data) {
+        if (data.ok || data.success) return { ok: true };
+        return { ok: false, error: data.error || "Credit reward failed" };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
   const { data: wallet } = await client
     .from("wallets")
     .select()
@@ -263,27 +296,21 @@ export async function creditReward(
     .maybeSingle();
   if (!wallet) return { ok: false, error: "Recipient has no wallet" };
 
-  // Idempotency check: if a contribution with this contribution_id already exists, skip
+  // Fixed Idempotency check: check wallet_transactions table for contribution_id & type = 'TASK_REWARD', NOT contributions table!
   if (input.contribution_id) {
-    const { data: existingContribution } = await client
-      .from("contributions")
+    const { data: existingTx } = await client
+      .from("wallet_transactions")
       .select("id")
-      .eq("id", input.contribution_id)
+      .eq("contribution_id", input.contribution_id)
+      .eq("type", "TASK_REWARD")
       .maybeSingle();
-    if (existingContribution) {
+    if (existingTx) {
       return { ok: true };
     }
   }
 
-  const { error: updateError } = await client
-    .from("wallets")
-    .update({
-      available_balance: (wallet.available_balance ?? 0) + input.amount,
-      total_earned: (wallet.total_earned ?? 0) + input.amount,
-    })
-    .eq("id", wallet.id);
-  if (updateError) return { ok: false, error: updateError.message };
-
+  // R1b: Do NOT increment available_balance immediately!
+  // Insert wallet_transactions with status: 'PENDING'
   const { error: txError } = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     task_id: input.task_id,
@@ -291,7 +318,7 @@ export async function creditReward(
     amount: input.amount,
     currency: input.currency,
     type: "TASK_REWARD",
-    status: "CREDITED",
+    status: "PENDING",
   });
   if (txError) return { ok: false, error: txError.message };
 
@@ -302,14 +329,86 @@ export interface DebitWalletInput {
   userId: string;
   amount: number;
   currency?: string;
+  type?: string;
+  status?: string;
+  taskId?: string | null;
+  withdrawalId?: string | null;
 }
+
+const walletUserLocks = new Map<string, Promise<any>>();
 
 export async function debitWallet(
   input: DebitWalletInput,
   clientOverride?: SupabaseClient | null,
 ): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  if (input.amount <= 0) {
+    return { ok: false, error: "Debit amount must be positive" };
+  }
+
+  // Serialize concurrent debit operations per user to prevent TOCTOU race conditions
+  const currentLock = walletUserLocks.get(input.userId) ?? Promise.resolve();
+  let releaseLock: () => void;
+  const newLock = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  walletUserLocks.set(input.userId, currentLock.then(() => newLock, () => newLock));
+
+  await currentLock;
+  try {
+    return await executeDebitWallet(input, clientOverride);
+  } finally {
+    releaseLock!();
+    if (walletUserLocks.get(input.userId) === newLock) {
+      walletUserLocks.delete(input.userId);
+    }
+  }
+}
+
+async function executeDebitWallet(
+  input: DebitWalletInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
   const client = clientOverride ?? db();
   if (!client) return { ok: false, error: "No database client" };
+
+  const txType = input.type ?? "WITHDRAWAL";
+  let status = input.status;
+  if (!status) {
+    if (txType === "ESCROW_LOCK") {
+      status = "COMPLETED";
+    } else if (input.currency) {
+      status = "REQUESTED";
+    } else {
+      status = "COMPLETED";
+    }
+  }
+
+  const withdrawalId = input.withdrawalId ?? `${input.userId}_${Date.now()}`;
+
+  // Attempt atomic_debit_wallet RPC first in non-test environment
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_debit_wallet", {
+        p_user_id: input.userId,
+        p_amount: input.amount,
+        p_currency: input.currency ?? "INR",
+        p_type: txType,
+        p_status: status,
+        p_task_id: input.taskId ?? null,
+        p_withdrawal_id: withdrawalId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return { ok: true, newBalance: data.new_balance ?? data.newBalance };
+        }
+        return { ok: false, error: data.error || "Debit failed" };
+      }
+    } catch {
+      // Fallback to conditional update
+    }
+  }
 
   // Get wallet for the user
   const { data: wallet } = await client
@@ -320,7 +419,6 @@ export async function debitWallet(
 
   if (!wallet) return { ok: false, error: "Wallet not found" };
 
-  // Check if available_balance >= amount
   const availableBalance = wallet.available_balance ?? 0;
   if (availableBalance < input.amount) {
     return { ok: false, error: "Insufficient balance" };
@@ -328,48 +426,152 @@ export async function debitWallet(
 
   // Idempotency check: same wallet + amount + type within last 5 minutes
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const { data: existingTx } = await client
+  let txQuery = client
     .from("wallet_transactions")
     .select("id")
     .eq("wallet_id", wallet.id)
     .eq("amount", -Math.abs(input.amount))
-    .eq("type", "WITHDRAWAL")
-    .gte("created_at", fiveMinutesAgo)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("type", txType);
+
+  if (typeof (txQuery as any).gte === "function") {
+    txQuery = (txQuery as any).gte("created_at", fiveMinutesAgo);
+  }
+  if (typeof (txQuery as any).order === "function") {
+    txQuery = (txQuery as any).order("created_at", { ascending: false });
+  }
+  if (typeof (txQuery as any).limit === "function") {
+    txQuery = (txQuery as any).limit(1);
+  }
+
+  const { data: existingTx } = await txQuery.maybeSingle();
 
   if (existingTx) {
-    // Idempotent replay: no debit happened, balance is unchanged.
     return { ok: true, newBalance: availableBalance };
   }
 
-  // Update wallet by subtracting the amount
-  const { error: updateError } = await client
+  // Atomic conditional update: UPDATE wallets SET available_balance = available_balance - amount WHERE id = wallet.id AND available_balance >= amount
+  const updateBuilder = client
     .from("wallets")
     .update({
       available_balance: availableBalance - input.amount,
     })
     .eq("id", wallet.id);
 
+  if (typeof (updateBuilder as any).gte === "function") {
+    (updateBuilder as any).gte("available_balance", input.amount);
+  }
+
+  let updateError: any = null;
+  let updatedRow: any = null;
+
+  if (typeof (updateBuilder as any).select === "function") {
+    const selectBuilder = (updateBuilder as any).select("available_balance");
+    if (typeof selectBuilder?.maybeSingle === "function") {
+      const res = await selectBuilder.maybeSingle();
+      updateError = res?.error;
+      updatedRow = res?.data;
+    } else {
+      const res = await selectBuilder;
+      updateError = res?.error;
+      updatedRow = res?.data;
+    }
+    if (!updateError && !updatedRow) {
+      return { ok: false, error: "Insufficient balance" };
+    }
+  } else if (typeof (updateBuilder as any).then === "function") {
+    const res = await updateBuilder;
+    updateError = res?.error;
+  }
+
   if (updateError) return { ok: false, error: updateError.message };
 
-  // Insert wallet transaction with negative amount, type 'WITHDRAWAL', status 'COMPLETED'
-  const withdrawalId = `${input.userId}_${Date.now()}`;
+  // Insert wallet transaction
   const { error: txError } = await client.from("wallet_transactions").insert({
     wallet_id: wallet.id,
-    task_id: null,
+    task_id: input.taskId ?? null,
     contribution_id: null,
     withdrawal_id: withdrawalId,
     amount: -Math.abs(input.amount),
     currency: input.currency ?? "INR",
-    type: "WITHDRAWAL",
+    type: txType,
+    status: status,
+  });
+
+  if (txError) {
+    // Atomically roll back balance decrement if transaction insert fails
+    await client
+      .from("wallets")
+      .update({
+        available_balance: availableBalance,
+      })
+      .eq("id", wallet.id);
+
+    return { ok: false, error: txError.message };
+  }
+
+  const finalBalance = updatedRow?.available_balance ?? (availableBalance - input.amount);
+  return { ok: true, newBalance: finalBalance };
+}
+
+export interface CreditTopupInput {
+  userId: string;
+  amount: number;
+  currency?: string;
+}
+
+export async function creditTopup(
+  input: CreditTopupInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  const client = clientOverride ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  let { data: wallet } = await client
+    .from("wallets")
+    .select()
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (!wallet) {
+    const { data: newWallet, error: createError } = await client
+      .from("wallets")
+      .insert({
+        user_id: input.userId,
+        available_balance: 0,
+        total_earned: 0,
+        currency: input.currency ?? "INR",
+      })
+      .select()
+      .single();
+    if (createError || !newWallet) {
+      return { ok: false, error: createError?.message || "Failed to create wallet" };
+    }
+    wallet = newWallet;
+  }
+
+  const currentBalance = wallet.available_balance ?? 0;
+  const newBalance = currentBalance + input.amount;
+
+  const { error: updateError } = await client
+    .from("wallets")
+    .update({ available_balance: newBalance })
+    .eq("id", wallet.id);
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  const { error: txError } = await client.from("wallet_transactions").insert({
+    wallet_id: wallet.id,
+    task_id: null,
+    contribution_id: null,
+    amount: input.amount,
+    currency: input.currency ?? "INR",
+    type: "TOPUP",
     status: "COMPLETED",
   });
 
   if (txError) return { ok: false, error: txError.message };
 
-  return { ok: true, newBalance: availableBalance - input.amount };
+  return { ok: true, newBalance };
 }
 
 export async function getUserByGithubId(
@@ -417,33 +619,63 @@ export async function getUserById(
   return data;
 }
 
+export function cleanGithubHandle(handle?: string | null): string | null {
+  if (!handle) return null;
+  const trimmed = String(handle).trim().replace(/^@+/, "");
+  if (!trimmed) return null;
+  // If numeric-only, it's an internal GitHub numeric ID (e.g. "12345678"), not a username
+  if (/^\d+$/.test(trimmed)) return null;
+  // Common placeholders or fallbacks to reject
+  if (
+    trimmed.toLowerCase() === "user" ||
+    trimmed.toLowerCase() === "none" ||
+    trimmed.toLowerCase() === "null" ||
+    trimmed.toLowerCase() === "undefined"
+  ) {
+    return null;
+  }
+  // Standard GitHub username validation: 1-39 chars, alphanumeric or single hyphens, no trailing/leading hyphen
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 export async function upsertUser(
   user: UpsertUserInput,
   clientOverride?: SupabaseClient | null,
 ): Promise<UserProfile | null> {
   const client = clientOverride ?? db();
   if (!client) return null;
+
+  const payload: Record<string, unknown> = {
+    // Write the owning auth.users id so first-time OAuth users can INSERT
+    // their own row (users.id is NOT NULL and RLS requires auth.uid() = id).
+    ...(user.id ? { id: user.id } : {}),
+    username: user.username ?? "",
+    email: user.email ?? "",
+  };
+
+  if (user.github_id !== undefined) payload.github_id = user.github_id;
+  if (user.github_handle !== undefined) payload.github_handle = cleanGithubHandle(user.github_handle);
+  if (user.avatar_url !== undefined) payload.avatar_url = user.avatar_url;
+  if (user.bio !== undefined) payload.bio = user.bio;
+  if (user.company !== undefined) payload.company = user.company;
+  if (user.location !== undefined) payload.location = user.location;
+  if (user.followers_count !== undefined) payload.followers_count = user.followers_count;
+  if (user.public_repos_count !== undefined) payload.public_repos_count = user.public_repos_count;
+  // role is only written when explicitly provided: the `authenticated`
+  // role has INSERT/UPDATE on `role` revoked (migration 0002), so
+  // user-scoped callers must never send it. Server-side flows using
+  // the service role pass it explicitly.
+  if (user.role !== undefined) payload.role = user.role;
+
   const { data, error } = await client
     .from("users")
-    .upsert(
-      {
-        // Write the owning auth.users id so first-time OAuth users can INSERT
-        // their own row (users.id is NOT NULL and RLS requires auth.uid() = id).
-        ...(user.id ? { id: user.id } : {}),
-        github_id: user.github_id ?? null,
-        username: user.username ?? "",
-        email: user.email ?? "",
-        avatar_url: user.avatar_url ?? null,
-        // role is only written when explicitly provided: the `authenticated`
-        // role has INSERT/UPDATE on `role` revoked (migration 0002), so
-        // user-scoped callers must never send it. Server-side flows using
-        // the service role pass it explicitly.
-        ...(user.role !== undefined ? { role: user.role } : {}),
-      },
-      { onConflict: "id", ignoreDuplicates: false },
-    )
+    .upsert(payload, { onConflict: "id", ignoreDuplicates: false })
     .select()
     .maybeSingle();
+
   if (error) {
     console.error("[upsertUser] Supabase error:", error.message, error.details, error.hint);
     return null;
@@ -453,7 +685,7 @@ export async function upsertUser(
 
 export async function syncGithubProfile(
   userId: string,
-  providerToken: string,
+  providerToken?: string | null,
   githubId?: string | null,
   githubHandle?: string | null,
   clientOverride?: SupabaseClient | null,
@@ -461,38 +693,87 @@ export async function syncGithubProfile(
   const client = clientOverride ?? db();
   if (!client) return null;
 
-  const res = await fetch("https://api.github.com/user", {
-    headers: {
-      Authorization: `Bearer ${providerToken}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "gig-alpha",
-    },
-  });
+  let data: GitHubProfileData | null = null;
 
-  if (!res.ok) {
-    throw new Error(`GitHub API request failed (${res.status})`);
+  // 1. Authenticated fetch via OAuth provider token
+  if (providerToken) {
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${providerToken}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "gig-alpha",
+        },
+      });
+      if (res.ok) {
+        data = (await res.json()) as GitHubProfileData;
+      } else {
+        console.warn(`[syncGithubProfile] Token fetch returned status ${res.status}`);
+      }
+    } catch (err) {
+      console.warn("[syncGithubProfile] Token fetch failed:", err);
+    }
   }
 
-  const data = (await res.json()) as GitHubProfileData;
+  // 2. Fallback to public GitHub user endpoint if token fetch didn't succeed
+  const cleanHandle = cleanGithubHandle(githubHandle || data?.login);
+  if (!data && cleanHandle) {
+    try {
+      const res = await fetch(`https://api.github.com/users/${encodeURIComponent(cleanHandle)}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "gig-alpha",
+        },
+      });
+      if (res.ok) {
+        data = (await res.json()) as GitHubProfileData;
+      } else {
+        console.warn(`[syncGithubProfile] Public user fetch returned status ${res.status}`);
+      }
+    } catch (err) {
+      console.warn("[syncGithubProfile] Public user fetch failed:", err);
+    }
+  }
+
+  const resolvedHandle = cleanGithubHandle(data?.login || cleanHandle);
+  const resolvedId = data?.id ? String(data.id) : (githubId ? String(githubId) : null);
+
+  const updatePayload: Record<string, unknown> = {
+    github_id: resolvedId,
+    github_handle: resolvedHandle,
+    github_updated_at: new Date().toISOString(),
+  };
+
+  if (data?.avatar_url) {
+    updatePayload.avatar_url = data.avatar_url;
+  }
+  if (data?.name || data?.login) {
+    updatePayload.username = data.name || data.login;
+  }
+  if (data?.bio !== undefined) {
+    updatePayload.bio = data.bio;
+  }
+  // Note: We deliberately do NOT sync external GitHub company into users.company,
+  // as users.company is the internal tenant boundary identifier for business accounts.
+  if (data?.location !== undefined) {
+    updatePayload.location = data.location;
+  }
+  if (typeof data?.followers === "number") {
+    updatePayload.followers_count = data.followers;
+  }
+  if (typeof data?.public_repos === "number") {
+    updatePayload.public_repos_count = data.public_repos;
+  }
+
   const { data: profile, error } = await client
     .from("users")
-    .update({
-      github_id: githubId ?? data.login ?? null,
-      github_handle: githubHandle ?? data.login ?? null,
-      username: data.name ?? data.login ?? "",
-      avatar_url: data.avatar_url ?? null,
-      bio: data.bio ?? null,
-      company: data.company ?? null,
-      location: data.location ?? null,
-      followers_count: data.followers ?? 0,
-      public_repos_count: data.public_repos ?? 0,
-      github_updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", userId)
     .select()
     .maybeSingle();
 
   if (error) {
+    console.error(`[syncGithubProfile] Database write failed: ${error.message}`);
     throw new Error(`Could not write GitHub profile: ${error.message}`);
   }
   return profile;
@@ -575,7 +856,9 @@ export async function getOpenTasksWithRepositories(
   query = query.order("created_at", { ascending: false });
   const { data, error } = await query;
   if (error) return [];
-  return (data ?? []).map((row) => ({
+  return (data ?? [])
+    .filter((row) => row.repositories?.opted_in === true)
+    .map((row) => ({
     task: {
       id: row.id,
       repository_id: row.repository_id,
@@ -603,6 +886,7 @@ export async function countActiveClaimsForTasks(
     .from("claims")
     .select("id", { count: "exact", head: true })
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .in("task_id", taskIds);
   if (error) return 0;
   return count ?? 0;
@@ -618,6 +902,29 @@ export async function getTaskById(id: string): Promise<Task | null> {
     .maybeSingle();
   if (error) return null;
   return data;
+}
+
+export async function updateTaskStatus(
+  taskId: string,
+  status: string,
+  expectedStatus?: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<boolean> {
+  const client = clientOverride ?? db();
+  if (!client) return false;
+  let query = client
+    .from("tasks")
+    .update({ status })
+    .eq("id", taskId);
+
+  if (expectedStatus) {
+    query = query.eq("status", expectedStatus);
+  }
+
+  const { data, error } = await query.select().maybeSingle();
+  if (error) return false;
+  if (expectedStatus && !data) return false;
+  return true;
 }
 
 export async function getTasksByRepository(
@@ -636,8 +943,9 @@ export async function getTasksByRepository(
 export async function claimTask(
   taskId: string,
   userId: string,
+  clientOverride?: SupabaseClient | null,
 ): Promise<Claim | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
   const { data: existing } = await client
     .from("claims")
@@ -645,11 +953,21 @@ export async function claimTask(
     .eq("task_id", taskId)
     .eq("user_id", userId)
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (existing) return existing;
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await client
     .from("claims")
-    .insert({ task_id: taskId, user_id: userId, status: "active" })
+    .insert({
+      task_id: taskId,
+      user_id: userId,
+      status: "active",
+      expires_at: expiresAt,
+    })
     .select()
     .maybeSingle();
   if (error) return null;
@@ -681,22 +999,87 @@ export async function getActiveClaimForTask(
     .select()
     .eq("task_id", taskId)
     .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error) return null;
   return data;
 }
 
-export async function setClaimStatus(
+export async function getActiveClaimForUserAndTask(
+  taskId: string,
+  userId: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<Claim | null> {
+  const client = clientOverride ?? db();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("claims")
+    .select()
+    .eq("task_id", taskId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+export async function getClaimById(
   claimId: string,
-  status: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<Claim | null> {
+  const client = clientOverride ?? db();
+  if (!client) return null;
+  const { data, error } = await client
+    .from("claims")
+    .select()
+    .eq("id", claimId)
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+export async function expireOtherClaimsForTask(
+  taskId: string,
+  winningClaimId: string,
   clientOverride?: SupabaseClient | null,
 ): Promise<boolean> {
   const client = clientOverride ?? db();
   if (!client) return false;
   const { error } = await client
     .from("claims")
+    .update({ status: "expired" })
+    .eq("task_id", taskId)
+    .neq("id", winningClaimId)
+    .eq("status", "active");
+  return !error;
+}
+
+export async function setClaimStatus(
+  claimId: string,
+  status: string,
+  expectedStatus?: string,
+  clientOverride?: SupabaseClient | null,
+): Promise<boolean> {
+  const client = clientOverride ?? db();
+  if (!client) return false;
+  let query = client
+    .from("claims")
     .update({ status })
     .eq("id", claimId);
+
+  if (expectedStatus) {
+    query = query.eq("status", expectedStatus);
+  }
+
+  if (typeof (query as any).select === "function") {
+    const { data, error } = await (query as any).select().maybeSingle();
+    if (error) return false;
+    if (expectedStatus && !data) return false;
+    return true;
+  }
+
+  const { error } = await query;
   return !error;
 }
 
@@ -816,23 +1199,33 @@ export async function getSubmissionById(
 export async function updateSubmissionStatus(
   id: string,
   status: string,
+  expectedStatus: string = "pending",
+  clientOverride?: SupabaseClient | null,
 ): Promise<Submission | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
-  const { data, error } = await client
+  let query = client
     .from("submissions")
     .update({ pr_status: status })
-    .eq("id", id)
+    .eq("id", id);
+
+  if (expectedStatus) {
+    query = query.eq("pr_status", expectedStatus);
+  }
+
+  const { data, error } = await query
     .select()
     .maybeSingle();
-  if (error) return null;
+
+  if (error || !data) return null;
   return data;
 }
 
 export async function createContribution(
   input: CreateContributionInput,
+  clientOverride?: SupabaseClient | null,
 ): Promise<Contribution | null> {
-  const client = db();
+  const client = clientOverride ?? db();
   if (!client) return null;
   const { data, error } = await client
     .from("contributions")
@@ -846,7 +1239,23 @@ export async function createContribution(
     })
     .select()
     .maybeSingle();
-  if (error) return null;
+
+  if (error) {
+    // Handle unique constraint violation on contributions_submission_id_unique gracefully
+    if (error.code === "23505" || error.message?.includes("duplicate key") || error.message?.includes("unique constraint")) {
+      try {
+        const { data: existing } = await client
+          .from("contributions")
+          .select()
+          .eq("submission_id", input.submission_id)
+          .maybeSingle();
+        return existing ?? null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
   return data;
 }
 

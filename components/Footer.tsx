@@ -141,7 +141,7 @@ export default function Footer() {
         </div>
         <div className="footer-bottom">
           <p className="footer-legal-disclaimer">
-            GIG records and verifies eligible payment events through a blockchain-backed audit layer. GIG is an independent engineering platform developed by
+            GIG records and verifies eligible payment events through an immutable cryptographic audit ledger. GIG is an independent engineering platform developed by
             Braynix Studios (Product Lead: Pranjal Yadav) and is not affiliated with, endorsed by, or sponsored by GitHub, Inc.
           </p>
           <div className="footer-meta-row">

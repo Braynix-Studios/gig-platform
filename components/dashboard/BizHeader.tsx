@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { cleanGithubHandle } from "@/lib/db-operations";
+import { getSavedTasks } from "@/lib/saved-tasks";
 
 const CHARCOAL = "#151b1d";
 const MINT = "#00c950";
@@ -12,7 +15,7 @@ const GREEN = "#257b5a";
 interface BizHeaderProps {
   displayName: string;
   displayEmail: string;
-  activeTab: "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing";
+  activeTab: "dashboard" | "tasks-backlog" | "issue-pool" | "talent-pool" | "workspace" | "billing" | "profile";
   githubHandle?: string | null;
 }
 
@@ -21,6 +24,23 @@ function isActive(activeTab: string, tab: string): boolean {
 }
 
 export default function BizHeader({ displayName, displayEmail, activeTab, githubHandle }: BizHeaderProps) {
+  const cleanHandle = cleanGithubHandle(githubHandle);
+  const [savedCount, setSavedCount] = useState<number>(0);
+
+  useEffect(() => {
+    setSavedCount(getSavedTasks().length);
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.count === "number") {
+        setSavedCount(detail.count);
+      } else {
+        setSavedCount(getSavedTasks().length);
+      }
+    };
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    return () => window.removeEventListener("gig_tasks_updated", handleUpdate);
+  }, []);
+
   return (
     <header
       style={{
@@ -55,7 +75,7 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           </span>
           <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 7, height: 7, borderRadius: 9999, backgroundColor: MINT, display: "inline-block" }} />
-            Tier 1 Enterprise Sponsor · Multi-Sig Escrow Active
+            Business Sponsor · Escrow Active
           </span>
         </div>
         <h1
@@ -74,9 +94,9 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {githubHandle ? (
+        {cleanHandle ? (
           <a
-            href={`https://github.com/${githubHandle}`}
+            href={`https://github.com/${cleanHandle}`}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -95,7 +115,7 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4" /><path d="M12 22a10 9 0 1 0 0-18 10 9 0 0 0 0 18z" /></svg>
-            @{githubHandle}
+            @{cleanHandle}
           </a>
         ) : (
           <a
@@ -120,6 +140,26 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
           </a>
         )}
         <Link
+          href="/dashboard/business?tab=dashboard"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 18px",
+            borderRadius: 6,
+            backgroundColor: isActive(activeTab, "dashboard") ? MINT : "transparent",
+            color: isActive(activeTab, "dashboard") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "dashboard") ? MINT : "rgba(255,255,255,0.25)"}`,
+            fontWeight: 700,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Dashboard
+        </Link>
+        <Link
           href="/dashboard/business?tab=tasks-backlog"
           style={{
             display: "inline-flex",
@@ -138,7 +178,67 @@ export default function BizHeader({ displayName, displayEmail, activeTab, github
             textDecoration: "none",
           }}
         >
-          + Post a Task
+          Tasks Backlog
+          {savedCount > 0 && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 20,
+                height: 20,
+                padding: "0 6px",
+                borderRadius: 9999,
+                backgroundColor: isActive(activeTab, "tasks-backlog") ? "#ffffff" : MINT,
+                color: isActive(activeTab, "tasks-backlog") ? GREEN : "#ffffff",
+                fontSize: 11,
+                fontWeight: 800,
+                marginLeft: 6,
+              }}
+            >
+              {savedCount}
+            </span>
+          )}
+        </Link>
+        <Link
+          href="/dashboard/business?tab=issue-pool"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 18px",
+            borderRadius: 6,
+            backgroundColor: isActive(activeTab, "issue-pool") ? MINT : "transparent",
+            color: isActive(activeTab, "issue-pool") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "issue-pool") ? MINT : "rgba(255,255,255,0.25)"}`,
+            fontWeight: 600,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Issue Pool
+        </Link>
+        <Link
+          href="/dashboard/business?tab=profile"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            height: 42,
+            padding: "0 18px",
+            borderRadius: 6,
+            backgroundColor: isActive(activeTab, "profile") ? MINT : "transparent",
+            color: isActive(activeTab, "profile") ? MINT_FG : "#ffffff",
+            border: `1.5px solid ${isActive(activeTab, "profile") ? MINT : "rgba(255,255,255,0.25)"}`,
+            fontWeight: 600,
+            fontSize: 13,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Company Profile
         </Link>
         <Link
           href="/dashboard/business?tab=billing"

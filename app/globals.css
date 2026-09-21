@@ -2016,28 +2016,46 @@
    ========================================================================== */
 @keyframes gig-skeleton-shimmer {
   0% {
-    background-position: -200px 0;
+    background-position: -300px 0;
   }
   100% {
-    background-position: calc(200px + 100%) 0;
+    background-position: calc(300px + 100%) 0;
   }
 }
 
 .skeleton {
-  background-color: var(--color-fog-border);
+  background-color: #ebedec;
   background-image: linear-gradient(
     90deg,
-    var(--color-fog-border) 0px,
-    rgba(255, 255, 255, 0.65) 100px,
-    var(--color-fog-border) 200px
+    #ebedec 0px,
+    #f7f9f7 60px,
+    rgba(0, 201, 80, 0.09) 130px,
+    #f7f9f7 200px,
+    #ebedec 280px
   );
-  background-size: 200px 100%;
+  background-size: 300px 100%;
   background-repeat: no-repeat;
-  animation: gig-skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: gig-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-dark {
+  background-color: #1e2628;
+  background-image: linear-gradient(
+    90deg,
+    #1e2628 0px,
+    #273336 60px,
+    rgba(0, 201, 80, 0.12) 130px,
+    #273336 200px,
+    #1e2628 280px
+  );
+  background-size: 300px 100%;
+  background-repeat: no-repeat;
+  animation: gig-skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
+  .skeleton,
+  .skeleton-dark {
     animation: none;
   }
 }

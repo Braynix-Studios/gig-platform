@@ -5,7 +5,9 @@ import { getSession } from '@/lib/session';
 import {
   claimTask,
   getTaskById,
+  getRepositoryById,
   getActiveClaimForTask,
+  getActiveClaimForUserAndTask,
   submitPR,
 } from '@/lib/db-operations';
 
@@ -27,6 +29,9 @@ export async function claimIssueAction(
   }
   if (session.role !== 'developer') {
     return { ok: false, message: 'Only developers can claim issues.' };
+  }
+  if (!session.githubId) {
+    return { ok: false, message: 'Connect your GitHub account before claiming issues.' };
   }
 
   const taskId = formData.get('taskId');
@@ -81,8 +86,25 @@ export async function submitPrAction(
     };
   }
 
-  const claim = await getActiveClaimForTask(taskId);
-  if (!claim || claim.user_id !== session.userId) {
+  // Parse PR URL to extract owner/repo (R1f)
+  const prMatch = url.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/);
+  if (!prMatch) {
+    return { ok: false, message: 'Could not parse GitHub PR URL.' };
+  }
+  const [, prOwner, prRepo] = prMatch;
+
+  // Load task and repository to validate PR belongs to task repo
+  const task = await getTaskById(taskId);
+  if (!task) return { ok: false, message: 'Task not found.' };
+  const repo = await getRepositoryById(task.repository_id);
+  if (!repo) return { ok: false, message: 'Task repository not found.' };
+
+  if (prOwner.toLowerCase() !== repo.owner.toLowerCase() || prRepo.toLowerCase() !== repo.name.toLowerCase()) {
+    return { ok: false, message: `PR must belong to the task repository: ${repo.owner}/${repo.name}` };
+  }
+
+  const claim = await getActiveClaimForUserAndTask(taskId, session.userId);
+  if (!claim) {
     return { ok: false, message: 'Claim this issue first before submitting a PR.' };
   }
 
