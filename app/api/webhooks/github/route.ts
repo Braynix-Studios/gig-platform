@@ -4,6 +4,7 @@ import { supabaseAdmin, supabase } from "@/lib/supabaseClient";
 import {
   createContribution,
   creditReward,
+  verifyReward,
   releaseReward,
   setClaimStatus,
   updateTaskStatus,
@@ -140,7 +141,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     client,
   );
 
-  // 5. Queue reward as PENDING then advance to AVAILABLE
+  // 5. Queue reward: PENDING → VERIFIED → AVAILABLE
   const amount = task?.reward_amount ?? 0;
   if (amount > 0 && contribution) {
     const payout = await creditReward(
@@ -160,6 +161,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     if (payout.transactionId) {
+      // Step 1: Verify evidence → PENDING → VERIFIED
+      const verified = await verifyReward(
+        { transactionId: payout.transactionId },
+        client,
+      );
+      if (!verified.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: `PR verified but reward verification failed: ${verified.error}`,
+          },
+          { status: 500 },
+        );
+      }
+      // Step 2: Release reward → VERIFIED → AVAILABLE
       const released = await releaseReward(
         { transactionId: payout.transactionId },
         client,

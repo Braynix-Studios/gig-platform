@@ -19,15 +19,34 @@ function mapDashboardData(
 
   const tasks =
     raw.claimedTasks && raw.claimedTasks.length > 0
-      ? raw.claimedTasks.map(({ task, claim }) => ({
-          id: claim.id,
-          title: task?.title || "Claimed task",
-          repo:
-            task?.issue_url?.replace(/^https?:\/\/github\.com\//, "") || "gig/repo",
-          status: ("Locked" as const),
-          assignee: displayName,
-          lockedAmount: task?.reward_amount ? currency(task.reward_amount) : "—",
-          lockExpiry: "48h",
+      ? raw.claimedTasks.map(({ task, claim }) => {
+          const expiresAt = claim.expires_at ? new Date(claim.expires_at) : null;
+          const hoursLeft = expiresAt
+            ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 3600000))
+            : null;
+          return {
+            id: claim.id,
+            title: task?.title || "Claimed task",
+            repo:
+              task?.issue_url?.replace(/^https?:\/\/github\.com\//, "") || "gig/repo",
+            status: ("Locked" as const),
+            assignee: displayName,
+            lockedAmount: task?.reward_amount ? currency(task.reward_amount) : "—",
+            lockExpiry: hoursLeft !== null ? `${hoursLeft}h remaining` : "48h",
+            claimStatus: claim.status,
+          };
+        })
+      : [];
+
+  const submissions =
+    raw.submissions && raw.submissions.length > 0
+      ? raw.submissions.map((sub) => ({
+          id: sub.id,
+          taskId: sub.task_id,
+          prUrl: sub.pr_url,
+          prNumber: sub.pr_number,
+          prStatus: sub.pr_status,
+          submittedAt: sub.submitted_at,
         }))
       : [];
 
@@ -70,6 +89,7 @@ function mapDashboardData(
       walletFooter: "Ready for instant UPI bank withdrawal (Min ₹500)",
     },
     tasks,
+    submissions,
     transactions,
     badges: [],
     verifiedPRs,

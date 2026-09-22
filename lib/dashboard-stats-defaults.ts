@@ -98,7 +98,7 @@ export function getSidebarStatsSync(role: DashboardRole): SidebarStats {
     walletValue: '₹0',
     walletSubtext: 'No transactions yet',
     walletHref: '/dashboard/developer?tab=wallet',
-    reputationScore: '0',
+    reputationScore: 0,
     reputationValue: '0',
     reputationBadge: 'NEW',
     counts: { Tasks: '0', 'Verified PRs': '0' },

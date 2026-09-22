@@ -12,6 +12,7 @@ const { mockSupabase, mockDbOps } = vi.hoisted(() => {
   const mockDbOps = {
     createContribution: vi.fn(),
     creditReward: vi.fn(),
+    verifyReward: vi.fn(),
     releaseReward: vi.fn(),
     setClaimStatus: vi.fn(),
     updateTaskStatus: vi.fn(),
@@ -139,7 +140,9 @@ describe('GitHub Webhook Endpoint (/api/webhooks/github)', () => {
 
     mockDbOps.updateSubmissionStatus.mockResolvedValueOnce({ id: 'sub-1', pr_status: 'merged' });
     mockDbOps.createContribution.mockResolvedValueOnce({ id: 'contrib-1' });
-    mockDbOps.creditReward.mockResolvedValueOnce({ ok: true });
+    mockDbOps.creditReward.mockResolvedValueOnce({ ok: true, transactionId: 'tx-reward-1' });
+    mockDbOps.verifyReward.mockResolvedValueOnce({ ok: true });
+    mockDbOps.releaseReward.mockResolvedValueOnce({ ok: true, newBalance: 750 });
 
     const req = createSignedRequest({
       action: 'closed',
@@ -194,5 +197,15 @@ describe('GitHub Webhook Endpoint (/api/webhooks/github)', () => {
     expect(mockDbOps.setClaimStatus).toHaveBeenCalledWith('claim-1', 'completed', undefined, expect.anything());
     expect(mockDbOps.updateTaskStatus).toHaveBeenCalledWith('task-1', 'closed', 'open', expect.anything());
     expect(mockDbOps.expireOtherClaimsForTask).toHaveBeenCalledWith('task-1', 'claim-1', expect.anything());
+
+    // Verify reward flow: PENDING → VERIFIED → AVAILABLE
+    expect(mockDbOps.verifyReward).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'tx-reward-1' }),
+      expect.anything(),
+    );
+    expect(mockDbOps.releaseReward).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'tx-reward-1' }),
+      expect.anything(),
+    );
   });
 });

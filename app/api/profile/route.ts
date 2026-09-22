@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerClientWithCookies, supabaseAdmin } from "@/lib/supabaseClient";
+import { createServerClientWithCookies } from "@/lib/supabaseClient";
 import { getSession } from "@/lib/session";
 import { getFullProfile, upsertUser, UserProfile } from "@/lib/db-operations";
 
@@ -74,7 +74,6 @@ export async function PATCH(request: Request) {
       location,
       followers_count,
       public_repos_count,
-      company,
     } = body;
 
     const updates: Partial<ProfileUpdateFields> = {};
@@ -89,7 +88,7 @@ export async function PATCH(request: Request) {
 
     const dbClient = supabase;
 
-    // Update base user fields
+    // Update base user fields only (company is intentionally not user-service-editable)
     const updatedUser = await upsertUser(
       {
         id: userId,
@@ -103,14 +102,6 @@ export async function PATCH(request: Request) {
         { error: "Failed to update profile" },
         { status: 500 },
       );
-    }
-
-    // If company was provided and admin client is available, update company
-    if (company !== undefined && supabaseAdmin) {
-      await supabaseAdmin
-        .from("users")
-        .update({ company: company ? company.trim() : null })
-        .eq("id", userId);
     }
 
     const refreshedProfile = await getFullProfile(userId, dbClient);

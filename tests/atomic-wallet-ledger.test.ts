@@ -296,9 +296,9 @@ describe('Tier 1 & Tier 2: Atomic Wallet Ledger & State Machines', () => {
     expect(mockSupabase.update).toHaveBeenCalledWith({ available_balance: 2000 });
   });
 
-  // Canonical State Machine: releaseReward (PENDING -> AVAILABLE)
+  // Canonical State Machine: releaseReward (VERIFIED -> AVAILABLE)
   it('test_r2_release_reward_advances_to_available_and_credits_balance: advances reward and credits developer wallet', async () => {
-    const txData = { id: 'tx-reward-1', wallet_id: 'w-dev-1', amount: 750, status: 'PENDING' };
+    const txData = { id: 'tx-reward-1', wallet_id: 'w-dev-1', amount: 750, status: 'VERIFIED' };
     const walletData = { id: 'w-dev-1', available_balance: 250, total_earned: 250 };
 
     mockSupabase.maybeSingle

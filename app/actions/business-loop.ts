@@ -12,6 +12,7 @@ import {
   createContribution,
   setClaimStatus,
   creditReward,
+  verifyReward,
   releaseReward,
   updateTaskStatus,
   expireOtherClaimsForTask,
@@ -223,10 +224,18 @@ export async function reviewSubmissionAction(
     return { ok: false, message: `PR verified but payout failed: ${payout.error}` };
   }
 
-  // Advance reward from PENDING → AVAILABLE after business verification.
-  // The creditReward() call created a PENDING wallet_transaction; releaseReward()
-  // atomically transitions it to AVAILABLE and credits available_balance.
+  // Advance reward: PENDING → VERIFIED → AVAILABLE
+  // The creditReward() call created a PENDING wallet_transaction.
+  // verifyReward() transitions PENDING → VERIFIED (evidence confirmed).
+  // releaseReward() transitions VERIFIED → AVAILABLE and credits available_balance.
   if (payout.transactionId) {
+    const verified = await verifyReward({ transactionId: payout.transactionId }, supabaseAdmin);
+    if (!verified.ok) {
+      return {
+        ok: false,
+        message: `PR verified and reward queued, but verification failed: ${verified.error}`,
+      };
+    }
     const released = await releaseReward({ transactionId: payout.transactionId }, supabaseAdmin);
     if (!released.ok) {
       return {

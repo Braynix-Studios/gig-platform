@@ -1118,6 +1118,8 @@ DECLARE
   v_tx_id uuid;
   v_caller uuid;
   v_role text;
+  v_user_company text;
+  v_repo_owner text;
 BEGIN
   v_caller := auth.uid();
   v_role := COALESCE(auth.role(), '');
@@ -1166,20 +1168,52 @@ BEGIN
     );
   END IF;
 
-  -- Check if there is an active non-expired claim on this task
-  IF EXISTS (
-    SELECT 1 FROM public.claims
-    WHERE task_id = p_task_id AND status = 'active' AND expires_at > NOW()
-  ) THEN
-    RETURN jsonb_build_object(
-      'success', false,
-      'ok', false,
-      'error', 'Cannot refund escrow while an active claim exists on task'
-    );
-  END IF;
+   -- Check if there is an active non-expired claim on this task
+   IF EXISTS (
+     SELECT 1 FROM public.claims
+     WHERE task_id = p_task_id AND status = 'active' AND expires_at > NOW()
+   ) THEN
+     RETURN jsonb_build_object(
+       'success', false,
+       'ok', false,
+       'error', 'Cannot refund escrow while an active claim exists on task'
+     );
+   END IF;
 
-  -- Update task: mark canceled and unlock escrow
-  UPDATE public.tasks
+   -- Multi-tenant isolation: caller company must match task repository owner
+   IF p_business_id IS NOT NULL THEN
+     SELECT company INTO v_user_company FROM public.users WHERE id = p_business_id;
+     IF NOT FOUND OR v_user_company IS NULL OR TRIM(v_user_company) = '' THEN
+       RETURN jsonb_build_object(
+         'success', false,
+         'ok', false,
+         'error', 'Business user not found or has no company assigned'
+       );
+     END IF;
+
+     SELECT owner INTO v_repo_owner FROM public.repositories r
+     JOIN public.tasks t ON t.repository_id = r.id
+     WHERE t.id = p_task_id;
+
+     IF NOT FOUND OR v_repo_owner IS NULL THEN
+       RETURN jsonb_build_object(
+         'success', false,
+         'ok', false,
+         'error', 'Task repository not found'
+       );
+     END IF;
+
+     IF LOWER(TRIM(v_user_company)) <> LOWER(TRIM(v_repo_owner)) THEN
+       RETURN jsonb_build_object(
+         'success', false,
+         'ok', false,
+         'error', 'Forbidden: task repository does not belong to your company'
+       );
+     END IF;
+   END IF;
+
+   -- Update task: mark canceled and unlock escrow
+   UPDATE public.tasks
   SET status = 'canceled',
       escrow_locked = false
   WHERE id = p_task_id;

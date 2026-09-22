@@ -49,6 +49,15 @@ export interface DevTransaction {
   status: "Completed" | "Pending";
 }
 
+export interface DevSubmission {
+  id: string;
+  taskId: string;
+  prUrl: string;
+  prNumber?: string | null;
+  prStatus: string;
+  submittedAt?: string | null;
+}
+
 export interface DevBadge {
   label: string;
   description: string;
@@ -84,6 +93,7 @@ export interface DeveloperDashboardData {
   transactions: DevTransaction[];
   badges: DevBadge[];
   verifiedPRs: DevPR[];
+  submissions: DevSubmission[];
   walletTxCount: number;
   // Profile fields for editing
   username: string;
@@ -129,6 +139,7 @@ const FALLBACK: DeveloperDashboardData = {
   },
   tasks: [],
   transactions: [],
+  submissions: [],
   badges: [],
   verifiedPRs: [],
   walletTxCount: 0,
@@ -143,46 +154,9 @@ const FALLBACK: DeveloperDashboardData = {
   public_repos_count: null
 };
 
-const evidence = [
-  {
-    label: "Merge Latency",
-    value: "4 Days from Lock to Maintainer Merge",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-  },
-  {
-    label: "Inspected Code Diff",
-    value: "+352 lines · -3 lines · 107 passing unit tests",
-    green: true,
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <polyline points="16 18 22 12 16 6" />
-        <polyline points="8 6 2 12 8 18" />
-      </svg>
-    ),
-  },
-  {
-    label: "Maintainer Sign-Off",
-    value: "Approved by @eps1lon (Core Team)",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <polyline points="16 11 18 13 22 9" />
-      </svg>
-    ),
-  },
-];
+const evidence: { label: string; value: string; icon: React.ReactNode; green?: boolean }[] = [];
 
-const footer = [
-  { label: "REPUTATION AWARD", value: "+4 pts", valueColor: MINT },
-  { label: "VERIFIED SPECIALIZATION", value: "Next.js L2", valueColor: "#ffffff" },
-  { label: "BOUNTY DISBURSED", value: "₹500", valueColor: MINT },
-];
+const footer: { label: string; value: string; valueColor: string }[] = [];
 
 const shareIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -835,16 +809,8 @@ function TabContent({
     case "profile": {
       const [shareToast, setShareToast] = useState(false);
       const cleanGithub = cleanGithubHandle(profileState.github_handle);
-      const displayBadges: DevBadge[] = badges.length > 0 ? badges : [
-        { label: "Next.js L2 Specialist", description: "Verified expertise in Next.js 15+ App Router", earned: "2026-08-15" },
-        { label: "React 19 Early Adopter", description: "Production deployment with React 19 Server Actions", earned: "2026-07-22" },
-        { label: "TypeScript Champion", description: "100+ PRs with strict TypeScript compliance", earned: "2026-06-10" },
-      ];
-      const displayPRs: DevPR[] = verifiedPRs.length > 0 ? verifiedPRs : [
-        { id: "pr-1", repo: "vercel/next.js", title: "Fix stale redirect marker in hidden Activity", mergedAt: "2026-09-12", linesChanged: "+352 / -3" },
-        { id: "pr-2", repo: "vercel/next.js", title: "Improve Turbopack cache invalidation", mergedAt: "2026-08-28", linesChanged: "+124 / -12" },
-        { id: "pr-3", repo: "gig/auth-core", title: "Implement HMAC-SHA256 Session Middleware Gate", mergedAt: "2026-08-10", linesChanged: "+89 / -4" },
-      ];
+      const displayBadges: DevBadge[] = badges;
+      const displayPRs: DevPR[] = verifiedPRs;
       const hasGithub = Boolean(cleanGithub);
       const hasBio = Boolean(profileState.bio && profileState.bio.trim().length > 0);
       const hasLocation = Boolean(profileState.location && profileState.location.trim().length > 0);

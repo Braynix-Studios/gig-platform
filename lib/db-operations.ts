@@ -637,6 +637,66 @@ export interface ReleaseRewardInput {
   transactionId: string;
 }
 
+export interface VerifyRewardInput {
+  transactionId: string;
+}
+
+export async function verifyReward(
+  input: VerifyRewardInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = clientOverride ?? supabaseAdmin ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_verify_reward", {
+        p_transaction_id: input.transactionId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return { ok: true };
+        }
+        return { ok: false, error: data.error || "Verify reward failed" };
+      }
+    } catch {
+      // Fallback to TS implementation below
+    }
+  }
+
+  // Fallback implementation: PENDING → VERIFIED
+  const { data: tx, error: txError } = await client
+    .from("wallet_transactions")
+    .select("id, status")
+    .eq("id", input.transactionId)
+    .maybeSingle();
+
+  if (txError || !tx) {
+    return { ok: false, error: "Transaction not found" };
+  }
+
+  if (tx.status === "VERIFIED") {
+    return { ok: true };
+  }
+
+  if (tx.status !== "PENDING") {
+    return { ok: false, error: "Transaction is not in PENDING status" };
+  }
+
+  const { error: updateError } = await client
+    .from("wallet_transactions")
+    .update({ status: "VERIFIED" })
+    .eq("id", tx.id);
+
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  return { ok: true };
+}
+
 export async function releaseReward(
   input: ReleaseRewardInput,
   clientOverride?: SupabaseClient | null,
@@ -658,11 +718,11 @@ export async function releaseReward(
         return { ok: false, error: data.error || "Release reward failed" };
       }
     } catch {
-      // Fallback
+      // Fallback to TS implementation below
     }
   }
 
-  // Fallback implementation
+  // Fallback implementation: VERIFIED → AVAILABLE
   const { data: tx, error: txError } = await client
     .from("wallet_transactions")
     .select("id, wallet_id, amount, status")
@@ -677,8 +737,8 @@ export async function releaseReward(
     return { ok: true };
   }
 
-  if (tx.status !== "PENDING" && tx.status !== "VERIFIED") {
-    return { ok: false, error: "Transaction is not in PENDING or VERIFIED status" };
+  if (tx.status !== "VERIFIED") {
+    return { ok: false, error: "Transaction is not in VERIFIED status" };
   }
 
   const { data: wallet, error: walletError } = await client
@@ -710,7 +770,6 @@ export async function releaseReward(
     .eq("id", tx.id);
 
   if (txUpdateError) {
-    // Compensating rollback
     await client
       .from("wallets")
       .update({
@@ -722,6 +781,72 @@ export async function releaseReward(
   }
 
   return { ok: true, newBalance };
+}
+
+export interface RedeemRewardInput {
+  transactionId: string;
+}
+
+export async function redeemReward(
+  input: RedeemRewardInput,
+  clientOverride?: SupabaseClient | null,
+): Promise<{ ok: boolean; error?: string; newBalance?: number }> {
+  const client = clientOverride ?? supabaseAdmin ?? db();
+  if (!client) return { ok: false, error: "No database client" };
+
+  const isTestEnv = typeof process !== "undefined" && (process.env.NODE_ENV === "test" || Boolean(process.env.VITEST));
+  if (!isTestEnv && typeof client.rpc === "function") {
+    try {
+      const { data, error } = await client.rpc("atomic_redeem_reward", {
+        p_transaction_id: input.transactionId,
+      });
+
+      if (!error && data) {
+        if (data.ok || data.success) {
+          return { ok: true, newBalance: data.new_balance ?? data.newBalance };
+        }
+        return { ok: false, error: data.error || "Redeem reward failed" };
+      }
+    } catch {
+      // Fallback to TS implementation below
+    }
+  }
+
+  // Fallback implementation: AVAILABLE -> REDEEMED
+  const { data: tx, error: txError } = await client
+    .from("wallet_transactions")
+    .select("id, wallet_id, amount, status")
+    .eq("id", input.transactionId)
+    .maybeSingle();
+
+  if (txError || !tx) {
+    return { ok: false, error: "Transaction not found" };
+  }
+
+  if (tx.status === "REDEEMED") {
+    return { ok: true };
+  }
+
+  if (tx.status !== "AVAILABLE") {
+    return { ok: false, error: "Transaction is not in AVAILABLE status" };
+  }
+
+  const { error: updateError } = await client
+    .from("wallet_transactions")
+    .update({ status: "REDEEMED" })
+    .eq("id", tx.id);
+
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  const { data: wallet } = await client
+    .from("wallets")
+    .select("id, available_balance")
+    .eq("id", tx.wallet_id)
+    .maybeSingle();
+
+  return { ok: true, newBalance: wallet?.available_balance ?? null };
 }
 
 export async function refundTaskEscrow(
@@ -1439,6 +1564,7 @@ export async function getClaimedTasksByUser(
       user_id: row.user_id,
       status: row.status,
       claimed_at: row.claimed_at,
+      expires_at: row.expires_at,
     },
     task: row.tasks ?? null,
   }));

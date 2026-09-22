@@ -21,6 +21,7 @@ const { mockDbOperations, mockSession } = vi.hoisted(() => {
     createContribution: vi.fn(),
     setClaimStatus: vi.fn(),
     creditReward: vi.fn(),
+    verifyReward: vi.fn(),
     releaseReward: vi.fn(),
     updateTaskStatus: vi.fn(),
     expireOtherClaimsForTask: vi.fn(),
@@ -129,7 +130,9 @@ describe('Tier 1 & Tier 2: GitHub PR Verification & Repository Binding', () => {
 
     mockDbOperations.updateSubmissionStatus.mockResolvedValue({ id: 'sub-1', pr_status: 'merged' });
     mockDbOperations.createContribution.mockResolvedValue({ id: 'ctb-1', status: 'verified' });
-    mockDbOperations.creditReward.mockResolvedValue({ ok: true });
+    mockDbOperations.creditReward.mockResolvedValue({ ok: true, transactionId: 'tx-reward-1' });
+    mockDbOperations.verifyReward.mockResolvedValue({ ok: true });
+    mockDbOperations.releaseReward.mockResolvedValue({ ok: true, newBalance: 750 });
 
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });

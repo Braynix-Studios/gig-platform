@@ -82,23 +82,32 @@ describe('Tier 3 & Tier 4: E2E Developer Marketplace Lifecycle & Real-World Work
     // Stage 5: Sponsor review transitions reward to PENDING (R1b)
     const rewardState = {
       type: 'TASK_REWARD',
-      status: 'PENDING', // MUST be PENDING, not immediately spendable
+      status: 'PENDING',
       amount: bountyAmount,
       availableBalanceIncremented: false,
     };
     expect(rewardState.status).toBe('PENDING');
     expect(rewardState.availableBalanceIncremented).toBe(false);
 
-    // Stage 6: Verification confirms and moves reward to AVAILABLE
-    const confirmedReward = {
+    // Stage 6: Verification confirms → PENDING → VERIFIED
+    const verifiedReward = {
       ...rewardState,
+      status: 'VERIFIED',
+      availableBalanceIncremented: false,
+    };
+    expect(verifiedReward.status).toBe('VERIFIED');
+    expect(verifiedReward.availableBalanceIncremented).toBe(false);
+
+    // Stage 7: Release → VERIFIED → AVAILABLE
+    const releasedReward = {
+      ...verifiedReward,
       status: 'AVAILABLE',
       developerAvailableBalance: bountyAmount,
     };
-    expect(confirmedReward.status).toBe('AVAILABLE');
-    expect(confirmedReward.developerAvailableBalance).toBe(2500);
+    expect(releasedReward.status).toBe('AVAILABLE');
+    expect(releasedReward.developerAvailableBalance).toBe(2500);
 
-    // Stage 7: Developer requests withdrawal of ₹2,500 (R1c)
+    // Stage 8: Developer requests withdrawal of ₹2,500 (R1c)
     const withdrawalRequest = {
       userId: developerSession.userId,
       amount: 2500,
@@ -108,7 +117,7 @@ describe('Tier 3 & Tier 4: E2E Developer Marketplace Lifecycle & Real-World Work
     expect(withdrawalRequest.status).toBe('REQUESTED');
     expect(withdrawalRequest.balanceDebitedImmediately).toBe(false);
 
-    // Stage 8: Payout processor confirms bank payout -> status PAID
+    // Stage 9: Payout processor confirms bank payout -> status PAID
     const finalizedWithdrawal = {
       ...withdrawalRequest,
       status: 'PAID',

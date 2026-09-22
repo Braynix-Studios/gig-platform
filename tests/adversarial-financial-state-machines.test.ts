@@ -48,6 +48,7 @@ import {
   debitWallet,
   releaseReward,
   refundTaskEscrow,
+  verifyReward,
 } from '@/lib/db-operations';
 import { POST as withdrawalPOST, PATCH as withdrawalPATCH } from '@/app/api/wallet/withdrawal/route';
 import { getSession } from '@/lib/supabaseAuth';
@@ -256,19 +257,84 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
   });
 
   // =========================================================================
-  // 3. releaseReward State Machine (PENDING -> AVAILABLE)
+  // 3. verifyReward State Machine (PENDING -> VERIFIED)
   // =========================================================================
-  describe('Objective 3: releaseReward Lifecycle & Idempotency', () => {
-    it('empirical_reward_1_advances_pending_to_available: atomically updates tx status and credits available_balance and total_earned', async () => {
+  describe('Objective 3: verifyReward Lifecycle', () => {
+    it('empirical_verify_1_pending_to_verified: transitions PENDING transaction to VERIFIED', async () => {
+      const txRecord = {
+        id: 'tx-verify-1',
+        wallet_id: 'w-dev-verify',
+        amount: 500,
+        status: 'PENDING',
+      };
+
+      mockSupabase.maybeSingle.mockResolvedValueOnce({ data: txRecord, error: null });
+
+      const res = await verifyReward({ transactionId: 'tx-verify-1' }, mockSupabase as any);
+
+      expect(res.ok).toBe(true);
+      expect(mockSupabase.update).toHaveBeenCalledWith({ status: 'VERIFIED' });
+      expect(mockSupabase.update).toHaveBeenCalledWith({ eq: 'id' });
+    });
+
+    it('empirical_verify_2_idempotent_if_already_verified: does not re-update if already VERIFIED', async () => {
+      const txRecord = {
+        id: 'tx-already-verified',
+        wallet_id: 'w-dev-verify',
+        amount: 500,
+        status: 'VERIFIED',
+      };
+
+      mockSupabase.maybeSingle.mockResolvedValueOnce({ data: txRecord, error: null });
+
+      const res = await verifyReward({ transactionId: 'tx-already-verified' }, mockSupabase as any);
+
+      expect(res.ok).toBe(true);
+      // No updates should have been issued
+      expect(mockSupabase.update).not.toHaveBeenCalled();
+    });
+
+    it('empirical_verify_3_reject_non_pending: rejects transactions not in PENDING status', async () => {
+      const txRecord = {
+        id: 'tx-already-released',
+        wallet_id: 'w-dev-verify',
+        amount: 500,
+        status: 'AVAILABLE',
+      };
+
+      mockSupabase.maybeSingle.mockResolvedValueOnce({ data: txRecord, error: null });
+
+      const res = await verifyReward({ transactionId: 'tx-already-released' }, mockSupabase as any);
+
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/not in PENDING/i);
+      expect(mockSupabase.update).not.toHaveBeenCalled();
+    });
+
+    it('empirical_verify_4_transaction_not_found: returns error for non-existent transaction', async () => {
+      mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+      const res = await verifyReward({ transactionId: 'tx-nonexistent' }, mockSupabase as any);
+
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/Transaction not found/i);
+    });
+  });
+
+  // =========================================================================
+  // 4. releaseReward State Machine (VERIFIED -> AVAILABLE)
+  // =========================================================================
+  describe('Objective 4: releaseReward Lifecycle & Idempotency', () => {
+    it('empirical_reward_1_advances_verified_to_available: atomically updates tx status and credits available_balance and total_earned', async () => {
       const initialBalance = 200;
       const initialEarned = 200;
       const rewardAmount = 800;
 
       const txRecord = {
-        id: 'tx-reward-pending-1',
+        id: 'tx-reward-verified-1',
         wallet_id: 'w-dev-reward',
         amount: rewardAmount,
-        status: 'PENDING',
+        status: 'VERIFIED',
       };
       const walletRecord = {
         id: 'w-dev-reward',
@@ -280,7 +346,7 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
         .mockResolvedValueOnce({ data: txRecord, error: null }) // query tx
         .mockResolvedValueOnce({ data: walletRecord, error: null }); // query wallet
 
-      const res = await releaseReward({ transactionId: 'tx-reward-pending-1' }, mockSupabase as any);
+      const res = await releaseReward({ transactionId: 'tx-reward-verified-1' }, mockSupabase as any);
 
       expect(res.ok).toBe(true);
       expect(res.newBalance).toBe(1000);
@@ -312,7 +378,7 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
       expect(mockSupabase.update).not.toHaveBeenCalled();
     });
 
-    it('empirical_reward_3_rejects_non_pending_or_verified_status: rejects transactions with invalid state transitions', async () => {
+    it('empirical_reward_3_rejects_non_verified_status: rejects transactions not in VERIFIED status', async () => {
       const txRecord = {
         id: 'tx-completed-state',
         wallet_id: 'w-dev-reward',
@@ -325,7 +391,7 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
       const res = await releaseReward({ transactionId: 'tx-completed-state' }, mockSupabase as any);
 
       expect(res.ok).toBe(false);
-      expect(res.error).toMatch(/not in PENDING or VERIFIED/i);
+      expect(res.error).toMatch(/not in VERIFIED/i);
       expect(mockSupabase.update).not.toHaveBeenCalled();
     });
 
@@ -338,7 +404,7 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
         id: 'tx-fail-update',
         wallet_id: 'w-dev-reward',
         amount: rewardAmount,
-        status: 'PENDING',
+        status: 'VERIFIED',
       };
       const walletRecord = {
         id: 'w-dev-reward',
@@ -369,9 +435,9 @@ describe('Adversarial Financial State Machine Stress Tests', () => {
   });
 
   // =========================================================================
-  // 4. refundTaskEscrow Cancellation & Escrow Restoration
+  // 5. refundTaskEscrow Cancellation & Escrow Restoration
   // =========================================================================
-  describe('Objective 4: refundTaskEscrow Invariants & Boundary Analysis', () => {
+  describe('Objective 5: refundTaskEscrow Invariants & Boundary Analysis', () => {
     it('empirical_refund_1_successful_cancellation_and_refund: cancels open task, unlocks escrow, and credits business wallet', async () => {
       const taskId = 'task-open-101';
       const businessId = 'biz-owner-101';
