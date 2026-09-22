@@ -35,7 +35,7 @@ function getLegacySession(email: string, password: string, role: Role) {
       userId: 'biz-user-01',
       email,
       role,
-      name: 'Enterprise Sponsor',
+      name: 'Test Business',
     };
   }
 
@@ -47,7 +47,7 @@ function getLegacySession(email: string, password: string, role: Role) {
     userId: 'dev-user-01',
     email,
     role,
-    name: 'Alex Rivers',
+      name: 'Test Developer',
   };
 }
 

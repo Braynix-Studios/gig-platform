@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useOptimistic, useState, useActionState } from "react";
+import { useMemo, useOptimistic, useState, useEffect, useActionState } from "react";
 import type { IssuePoolData } from "@/lib/dashboard-data";
 import type { IssuePoolIssue } from "@/lib/dashboard-data";
 import {
@@ -9,6 +9,8 @@ import {
   submitPrAction,
   type DevLoopState,
 } from "@/app/actions/dev-loop";
+import CreateIssueModal from "@/components/dashboard/CreateIssueModal";
+import { getSavedTasks, isTaskSaved, toggleSavedTask } from "@/lib/saved-tasks";
 
 const BG_PAGE = "#fbfcfb";
 const CHARCOAL = "#151b1d";
@@ -26,6 +28,7 @@ type SortKey = "newest" | "reward-desc" | "reward-asc" | "difficulty-hard";
 interface IssuePoolProps {
   data: IssuePoolData;
   role: "developer" | "business";
+  onOpenImportModal?: () => void;
 }
 
 function currency(amount: number): string {
@@ -34,15 +37,15 @@ function currency(amount: number): string {
 
 function buttonLike(bg: string, fg: string): React.CSSProperties {
   return {
-    height: 44,
-    padding: "0 22px",
+    height: 36,
+    padding: "0 18px",
     borderRadius: 8,
     backgroundColor: bg,
     border: "none",
     color: fg,
     fontWeight: 700,
-    fontSize: 14,
-    letterSpacing: "0.02em",
+    fontSize: 13,
+    letterSpacing: "0.01em",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -50,6 +53,7 @@ function buttonLike(bg: string, fg: string): React.CSSProperties {
     cursor: "pointer",
     textDecoration: "none",
     whiteSpace: "nowrap",
+    transition: "all 0.15s ease-in-out",
   };
 }
 
@@ -67,22 +71,38 @@ function difficultyLabel(difficulty: string): string {
   return map[difficulty] || difficulty;
 }
 
-function iconBell() {
+function iconGithub() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
     </svg>
   );
 }
 
-function iconRefresh() {
+function iconClock() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M8 16H3v5" />
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function iconCoins() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 6v12M9 9h6M9 15h6" />
+    </svg>
+  );
+}
+
+function iconExternalLink() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
     </svg>
   );
 }
@@ -220,16 +240,15 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
     ...buttonLike(MINT, "#ffffff"),
     height: 36,
     padding: "0 16px",
-    fontSize: 13,
+    fontSize: 12,
     opacity: claimPending ? 0.6 : 1,
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
       {!issue.claimedByMe ? (
         <form
           action={(formData) => {
-            // Instant UI feedback; the server revalidation confirms it.
             onOptimistic(issue.id, "claimed");
             claimAction(formData);
           }}
@@ -255,12 +274,12 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
             placeholder="https://github.com/…/pull/12"
             aria-label="Pull request URL"
             style={{
-              width: 260,
+              width: 220,
               height: 36,
               padding: "0 12px",
               borderRadius: 8,
               border: `1.5px solid ${BORDER}`,
-              fontSize: 13,
+              fontSize: 12,
               color: CHARCOAL,
               fontFamily: "inherit",
               outline: "none",
@@ -273,7 +292,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
               ...buttonLike("#ffffff", GREEN),
               height: 36,
               padding: "0 16px",
-              fontSize: 13,
+              fontSize: 12,
               border: `1.5px solid ${GREEN}`,
               opacity: submitPending ? 0.6 : 1,
             }}
@@ -290,7 +309,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
             backgroundColor: MINT_FG,
             border: `1.5px solid ${MINT_BDR}`,
             color: GREEN,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 600,
             display: "inline-flex",
             alignItems: "center",
@@ -305,7 +324,7 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
       {(claimState?.message || submitState?.message) && (
         <span
           style={{
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: 600,
             color: claimState.ok && submitState.ok ? GREEN : "#ea4335",
             lineHeight: 1.4,
@@ -320,11 +339,278 @@ function DevIssueActions({ issue, onOptimistic }: DevIssueActionsProps) {
   );
 }
 
-export default function IssuePool({ data, role }: IssuePoolProps) {
-   const [query, setQuery] = useState("");
-   const [skill, setSkill] = useState("all");
-   const [difficulty, setDifficulty] = useState("all");
-   const [sort, setSort] = useState<SortKey>("newest");
+interface IssueCardProps {
+  issue: IssuePoolIssue;
+  role: "developer" | "business";
+  onOptimistic: (taskId: string, kind: "claimed" | "submitted") => void;
+}
+
+function IssueCard({ issue, role, onOptimistic }: IssueCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    setIsSaved(isTaskSaved(issue.id));
+    const handleUpdate = () => setIsSaved(isTaskSaved(issue.id));
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    return () => window.removeEventListener("gig_tasks_updated", handleUpdate);
+  }, [issue.id]);
+
+  const handleToggleTask = () => {
+    const newState = toggleSavedTask({
+      id: issue.id,
+      title: issue.title,
+      repo: issue.repo,
+      reward: issue.reward,
+      difficulty: issue.difficulty,
+      technology: issue.technology,
+      issueUrl: issue.issueUrl,
+    });
+    setIsSaved(newState);
+  };
+
+  return (
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        backgroundColor: "#ffffff",
+        border: `1px solid ${isHovered ? GREEN : BORDER}`,
+        borderRadius: 12,
+        padding: "20px 24px",
+        boxShadow: isHovered
+          ? "0 10px 28px rgba(37, 123, 90, 0.08)"
+          : "0 2px 6px rgba(0, 0, 0, 0.02)",
+        transition: "all 0.2s ease-in-out",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      {/* Top Metadata Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {/* Repo Tag */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 10px",
+              borderRadius: 6,
+              backgroundColor: "#f4f4f5",
+              color: CHARCOAL,
+              fontSize: 12,
+              fontWeight: 700,
+              fontFamily: "monospace",
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {iconGithub()}
+            {issue.repo}
+          </span>
+
+          {/* Time Ago */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: MUTED }}>
+            {iconClock()}
+            {issue.timeAgo}
+          </span>
+
+          {/* User Status Badges */}
+          {role === "developer" && issue.claimedByMe && <ClaimedChip />}
+          {role === "developer" && issue.submittedByMe && <SubmittedChip />}
+        </div>
+
+        {/* Right Badge Cluster: Stack, Difficulty & Bounty */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {issue.technology && <TechChip label={issue.technology} />}
+          <DifficultyChip label={issue.difficulty} />
+
+          {/* Bounty Reward Badge */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 12px",
+              borderRadius: 9999,
+              backgroundColor: MINT_SOFT,
+              border: `1px solid ${MINT_BDR}`,
+              color: GREEN,
+              fontSize: 14,
+              fontWeight: 800,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {iconCoins()}
+            {currency(issue.reward)}
+          </span>
+        </div>
+      </div>
+
+      {/* Card Title & Description */}
+      <div>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: CHARCOAL, lineHeight: 1.4 }}>
+          {issue.issueUrl ? (
+            <a
+              href={issue.issueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: CHARCOAL, textDecoration: "none", transition: "color 0.15s ease" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = GREEN)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = CHARCOAL)}
+            >
+              {issue.title}
+            </a>
+          ) : (
+            issue.title
+          )}
+        </h3>
+
+        {issue.description && (
+          <p
+            style={{
+              margin: "8px 0 0",
+              fontSize: 13,
+              color: MUTED,
+              lineHeight: 1.55,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {issue.description}
+          </p>
+        )}
+      </div>
+
+      {/* Bottom Footer Row: Tags & THREE Action Buttons */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingTop: 12,
+          borderTop: `1px solid ${BORDER}`,
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        {/* Left: Tags */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {(issue.tags || []).map((tag) => (
+            <span
+              key={tag}
+              style={{
+                fontSize: 11,
+                padding: "2px 8px",
+                borderRadius: 4,
+                backgroundColor: "rgba(113,113,123,0.08)",
+                color: MUTED,
+                fontWeight: 600,
+              }}
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+
+        {/* Right: THREE Action Buttons (Add to Task, Claim/Submit, GitHub Link) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* BUTTON 1: Add to Task */}
+          <button
+            type="button"
+            onClick={handleToggleTask}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 8,
+              backgroundColor: isSaved ? MINT_SOFT : "#ffffff",
+              border: `1.5px solid ${isSaved ? MINT_BDR : BORDER}`,
+              color: isSaved ? GREEN : CHARCOAL,
+              fontSize: 12,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "all 0.15s ease",
+            }}
+          >
+            {isSaved ? "✓ Added to Task" : "+ Add to Task"}
+          </button>
+
+          {/* BUTTON 2: Claim Issue / Submit PR */}
+          {role === "developer" && <DevIssueActions issue={issue} onOptimistic={onOptimistic} />}
+
+          {/* BUTTON 3: View GitHub Issue Link */}
+          {issue.issueUrl ? (
+            <a
+              href={issue.issueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 8,
+                backgroundColor: "#ffffff",
+                border: `1.5px solid ${BORDER}`,
+                color: CHARCOAL,
+                fontSize: 12,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = GREEN;
+                e.currentTarget.style.color = GREEN;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = BORDER;
+                e.currentTarget.style.color = CHARCOAL;
+              }}
+            >
+              View GitHub Issue
+              {iconExternalLink()}
+            </a>
+          ) : (
+            <span
+              style={{
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 8,
+                backgroundColor: "#f4f4f5",
+                border: `1.5px solid ${BORDER}`,
+                color: MUTED,
+                fontSize: 12,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+              }}
+            >
+              View GitHub Issue
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function IssuePool({ data, role, onOpenImportModal }: IssuePoolProps) {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [skill, setSkill] = useState("all");
+  const [difficulty, setDifficulty] = useState("all");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const base = role === "business" ? "/dashboard/business" : "/dashboard/developer";
@@ -389,22 +675,42 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
   const start = (currentPage - 1) * pageSize;
   const visible = filtered.slice(start, start + pageSize);
 
+  const [savedTasksCount, setSavedTasksCount] = useState<number>(0);
+
+  useEffect(() => {
+    setSavedTasksCount(getSavedTasks().length);
+    const handleUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.count === "number") {
+        setSavedTasksCount(detail.count);
+      } else {
+        setSavedTasksCount(getSavedTasks().length);
+      }
+    };
+    window.addEventListener("gig_tasks_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("gig_tasks_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
   const metrics = useMemo(() => {
     if (role === "business") {
       return [
         { label: "Open issues", value: String(data.openCount), sub: data.company ? `raised by ${data.company}` : "raised by your company", highlight: false },
         { label: "Claimed by devs", value: String(data.claimedTotal), sub: "active locks across your issues", highlight: false },
         { label: "Rewards committed", value: currency(data.rewardTotal), sub: "locked in escrow till verification", highlight: false },
-        { label: "Engagement", value: data.matchScore, sub: "of your issues claimed by devs", highlight: true },
+        { label: "Saved in Backlog", value: String(savedTasksCount), sub: "tasks queued for developers", highlight: true },
       ];
     }
     return [
       { label: "Open issues", value: String(data.openCount), sub: "available to claim right now", highlight: false },
-      { label: "My claimed issues", value: String(data.claimedByMe), sub: "active locks with 48h expiry", highlight: false },
+      { label: "My active & saved tasks", value: String(data.claimedByMe + savedTasksCount), sub: "active locks and saved tasks", highlight: true },
       { label: "Available rewards", value: currency(data.rewardTotal), sub: "across the issue pool", highlight: false },
-      { label: "Match score", value: data.matchScore, sub: "how well your profile fits the pool", highlight: true },
+      { label: "Match score", value: data.matchScore, sub: "how well your profile fits the pool", highlight: false },
     ];
-  }, [role, data]);
+  }, [role, data, savedTasksCount]);
 
   const resetPage = () => setPage(1);
 
@@ -437,110 +743,11 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
         }
       `}</style>
       <div className="ip-page-wrap" style={{ maxWidth: 1160, margin: "0 auto", padding: "28px 36px 80px" }}>
-        {/* Utility header */}
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-            paddingBottom: 16,
-            borderBottom: `1px solid ${BORDER}`,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: MUTED }}>
-              <Link href={base} style={{ color: MUTED, textDecoration: "none" }}>Dashboard</Link>
-              {" / "}
-              <span style={{ color: CHARCOAL, fontWeight: 600 }}>Issue Pool</span>
-            </span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "4px 12px",
-                borderRadius: 9999,
-                backgroundColor: MINT_SOFT,
-                border: `1px solid ${MINT_BDR}`,
-                color: GREEN,
-                fontSize: 11,
-                fontWeight: 700,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: MINT, flexShrink: 0 }} />
-              Last synced 2 min ago
-            </span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              style={{
-                height: 40,
-                padding: "0 16px",
-                borderRadius: 8,
-                backgroundColor: "#ffffff",
-                border: `1px solid ${BORDER}`,
-                color: CHARCOAL,
-                fontSize: 13,
-                fontWeight: 600,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                cursor: "pointer",
-              }}
-            >
-              {iconRefresh()}
-              Refresh issues
-            </button>
-            <button
-              type="button"
-              aria-label="Notifications"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 8,
-                backgroundColor: "#ffffff",
-                border: `1px solid ${BORDER}`,
-                color: MUTED,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              {iconBell()}
-            </button>
-            <span
-              aria-hidden="true"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 8,
-                backgroundColor: "#eee8ff",
-                border: "1px solid #c8b8f1",
-                color: "#6048a8",
-                fontSize: 14,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {data.initials}
-            </span>
-          </div>
-        </header>
-
-        {/* Heading */}
+        {/* Page Header */}
         <div
           style={{
             display: "flex",
-            alignItems: "flex-end",
+            alignItems: "center",
             justifyContent: "space-between",
             gap: 16,
             flexWrap: "wrap",
@@ -557,11 +764,29 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
                 : "Browse every open issue across the network, claim what fits, and earn verified rewards."}
             </p>
           </div>
-          {role === "business" ? (
-            <Link href={`${base}?tab=tasks-backlog`} style={buttonLike(MINT, MINT_FG)}>Create issue</Link>
-          ) : (
-            <button type="button" style={buttonLike(MINT, MINT_FG)}>Create issue</button>
-          )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {role === "business" && onOpenImportModal && (
+              <button
+                type="button"
+                onClick={onOpenImportModal}
+                style={{
+                  ...buttonLike("#ffffff", CHARCOAL),
+                  border: `1px solid ${BORDER}`,
+                }}
+              >
+                Sync GitHub Repo
+              </button>
+            )}
+            {role === "business" && (
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(true)}
+                style={buttonLike(MINT, MINT_FG)}
+              >
+                + Post New Issue
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Summary metrics */}
@@ -629,98 +854,27 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
               </div>
             </div>
 
-            {/* Issue rows */}
+            {/* Redesigned Issue Cards List */}
             {visible.length === 0 ? (
               <div style={{ padding: "48px 24px", textAlign: "center" }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: CHARCOAL }}>No matching issues</p>
                 <p style={{ margin: "6px 0 0", fontSize: 12, color: MUTED }}>Try clearing your search or filters to see more issues.</p>
               </div>
             ) : (
-              <div>
-                {visible.map((issue, idx) => (
-                  <div
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14, backgroundColor: "#fafafb" }}>
+                {visible.map((issue) => (
+                  <IssueCard
                     key={issue.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 20,
-                      padding: "16px 20px",
-                      borderTop: idx === 0 ? "none" : `1px solid ${BORDER}`,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div style={{ minWidth: 0, flex: "1 1 280px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <p style={{ margin: 0, fontWeight: 600, color: CHARCOAL, lineHeight: 1.4, fontSize: 14 }}>{issue.title}</p>
-                        {role === "developer" && issue.claimedByMe && <ClaimedChip />}
-                        {role === "developer" && issue.submittedByMe && <SubmittedChip />}
-                      </div>
-                      <p style={{ margin: "4px 0 0", fontSize: 11, color: MUTED, fontFamily: "monospace" }}>
-                        {issue.repo} · {issue.timeAgo}
-                      </p>
-                      {issue.description && (
-                        <p style={{ margin: "6px 0 0", fontSize: 12, color: MUTED, lineHeight: 1.5, maxWidth: 560 }}>
-                          {issue.description}
-                        </p>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-                      {role === "developer" && <DevIssueActions issue={issue} onOptimistic={handleOptimistic} />}
-                      {issue.technology && <TechChip label={issue.technology} />}
-                      <DifficultyChip label={issue.difficulty} />
-                      <span style={{ fontSize: 15, fontWeight: 800, color: GREEN, whiteSpace: "nowrap" }}>{currency(issue.reward)}</span>
-                      {issue.issueUrl ? (
-                        <a
-                          href={issue.issueUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            height: 36,
-                            padding: "0 16px",
-                            borderRadius: 8,
-                            backgroundColor: "#ffffff",
-                            border: `1.5px solid ${GREEN}`,
-                            color: GREEN,
-                            fontSize: 13,
-                            fontWeight: 600,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            whiteSpace: "nowrap",
-                            textDecoration: "none",
-                          }}
-                        >
-                          View issue
-                        </a>
-                      ) : (
-                        <span
-                          style={{
-                            height: 36,
-                            padding: "0 16px",
-                            borderRadius: 8,
-                            backgroundColor: "#ffffff",
-                            border: `1.5px solid ${BORDER}`,
-                            color: MUTED,
-                            fontSize: 13,
-                            fontWeight: 600,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          View issue
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    issue={issue}
+                    role={role}
+                    onOptimistic={handleOptimistic}
+                  />
                 ))}
               </div>
             )}
 
             {/* Pagination footer */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 20px", borderTop: `1px solid ${BORDER}`, backgroundColor: "rgba(0,0,0,0.015)", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 20px", borderTop: `1px solid ${BORDER}`, backgroundColor: "#ffffff", flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, color: MUTED }}>
                 Showing {filtered.length === 0 ? 0 : start + 1}–{Math.min(start + pageSize, filtered.length)} of {filtered.length}
               </span>
@@ -729,7 +883,7 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
-                    setPage(1); // Reset to first page when changing page size
+                    setPage(1);
                   }}
                   aria-label="Issues per page"
                   style={{ ...selectStyle, height: 34 }}
@@ -903,7 +1057,7 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
           </aside>
         </div>
 
-        {/* On-chain banner */}
+        {/* Verification banner */}
         <div
           style={{
             display: "flex",
@@ -942,9 +1096,9 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
               </svg>
             </span>
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: CHARCOAL }}>Issue activity is recorded on-chain</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: CHARCOAL }}>Issue activity is tracked and verified</p>
               <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED, lineHeight: 1.45 }}>
-                Every claim and verified pull request is written to the public audit record before any reward is released.
+                Every claim and verified pull request is recorded with verification before any reward is released.
               </p>
             </div>
           </div>
@@ -956,6 +1110,12 @@ export default function IssuePool({ data, role }: IssuePoolProps) {
           </Link>
         </div>
       </div>
+
+      <CreateIssueModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        userRole={role}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   syncGithubProfile,
   getUserByGithubId,
   getUserByEmail,
+  cleanGithubHandle,
 } from '@/lib/db-operations';
 
 function getCookieMethods(cookieStore: Awaited<ReturnType<typeof cookies>>): SupabaseCookieMethods {
@@ -60,17 +61,31 @@ export async function GET(request: NextRequest) {
         } = await supabase.auth.getUser();
 
         if (!userError && user) {
-          const githubId =
-            user.identities?.[0]?.identity_data?.sub || user.user_metadata?.github_id;
-          const githubHandle =
-            user.identities?.[0]?.identity_data?.login ||
-            user.user_metadata?.user_name ||
-            user.email?.split('@')[0] ||
-            'user';
+          const githubIdentity =
+            user.identities?.find((id) => id.provider === 'github') || user.identities?.[0];
+          const rawGithubId =
+            githubIdentity?.identity_data?.sub ||
+            githubIdentity?.id ||
+            user.user_metadata?.github_id ||
+            user.user_metadata?.provider_id ||
+            null;
+          const githubId = rawGithubId ? String(rawGithubId) : null;
 
-          // Resolve role: prefer an existing profile row (so a business user who
-          // connects GitHub keeps their role), then user_metadata, then developer.
-          let role = user.user_metadata?.role || 'developer';
+          const rawHandle =
+            githubIdentity?.identity_data?.user_name ||
+            githubIdentity?.identity_data?.preferred_username ||
+            githubIdentity?.identity_data?.login ||
+            user.user_metadata?.user_name ||
+            user.user_metadata?.preferred_username ||
+            user.user_metadata?.github_handle ||
+            null;
+
+          const githubHandle = cleanGithubHandle(rawHandle);
+
+          // Resolve role: prefer an existing profile row (so an established business user who
+          // connects GitHub keeps their role). Any new OAuth user strictly defaults to 'developer'.
+          // Business roles require trusted onboarding/membership, not self-asserted OAuth metadata.
+          let role = 'developer';
           const existingByGithub = githubId
             ? await getUserByGithubId(githubId, dbClient)
             : null;
@@ -82,33 +97,32 @@ export async function GET(request: NextRequest) {
           }
           finalRole = role;
 
-          // Server-side upsert (service role): links github_id and assigns
-            // the resolved role, which user-scoped clients cannot write.
+          // Server-side upsert (service role): links github_id, github_handle, and assigns
+          // the resolved role, which user-scoped clients cannot write.
           const profile = await upsertUser(
             {
               id: user.id,
               github_id: githubId,
-              username: user.user_metadata?.full_name || githubHandle,
+              github_handle: githubHandle,
+              username: user.user_metadata?.full_name || githubHandle || user.email?.split('@')[0] || 'Developer',
               email: user.email,
-              avatar_url: user.user_metadata?.avatar_url,
+              avatar_url: user.user_metadata?.avatar_url || null,
               role,
             },
             dbClient,
           );
 
           if (profile) {
-            // Fetch full GitHub profile data and store it locally (never persist the token).
-            if (session.provider_token) {
-              await syncGithubProfile(
-                user.id,
-                session.provider_token,
-                githubId,
-                githubHandle,
-                dbClient,
-              ).catch((syncErr) => {
-                console.error('[GitHub OAuth Callback] Profile sync failed', syncErr);
-              });
-            }
+            // Fetch authoritative GitHub profile data (avatar URL, bio, stats) and store it locally
+            await syncGithubProfile(
+              user.id,
+              session.provider_token,
+              githubId,
+              githubHandle,
+              dbClient,
+            ).catch((syncErr) => {
+              console.error('[GitHub OAuth Callback] Profile sync failed', syncErr);
+            });
 
             success = true;
           } else {

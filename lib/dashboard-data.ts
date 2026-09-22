@@ -18,6 +18,7 @@ import {
   getRepositories,
   getPendingSubmissionsForCompany,
   countActiveClaimsForTasks,
+  cleanGithubHandle,
 } from '@/lib/db-operations';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -62,15 +63,15 @@ export interface DeveloperStats {
 }
 
 const DEV_FALLBACK: DeveloperStats = {
-  reputationScore: '98.4',
-  reputationBadge: 'TOP 2%',
-  reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
-  verifiedContributions: '24',
-  contributionsFooter: 'Across 6 production open-source repositories',
-  lockedTasks: '2',
-  lockedFooter: '\u20b94,700 in locked escrow \u00b7 48h lock active',
-  walletBalance: '\u20b94,850',
-  walletFooter: 'Ready for instant UPI bank withdrawal (Min \u20b9500)',
+  reputationScore: '0',
+  reputationBadge: 'NEW',
+  reputationFooter: 'Reputation score based on verified PR contributions',
+  verifiedContributions: '0',
+  contributionsFooter: 'No verified contributions yet',
+  lockedTasks: '0',
+  lockedFooter: 'No active escrow locks',
+  walletBalance: '₹0',
+  walletFooter: 'Ready for UPI bank withdrawal (Min ₹500)',
 };
 
 export async function getDeveloperStats(userId?: string): Promise<DeveloperStats> {
@@ -105,45 +106,52 @@ export async function getSidebarStats(role: DashboardRole, userId?: string): Pro
       return getSidebarStatsSync('business');
     }
     try {
-      const [walletRes, tasksRes, usersRes, userRes] = await Promise.all([
+      const [walletRes, userRes] = await Promise.all([
         db.from('wallets').select('available_balance').eq('user_id', userId).maybeSingle(),
-        db.from('tasks').select('*', { count: 'exact', head: true }).eq('status', 'open'),
-        db.from('users').select('*', { count: 'exact', head: true }).eq('role', 'developer'),
         db.from('users').select('company').eq('id', userId).maybeSingle(),
       ]);
 
-      if (walletRes.error || tasksRes.error || usersRes.error || userRes.error || walletRes.data == null) {
+      if (walletRes.error || userRes.error || walletRes.data == null) {
         return getSidebarStatsSync('business');
       }
 
       const balance = walletRes.data.available_balance ?? 0;
-      const taskBacklog = tasksRes.count ?? 0;
-      const talentPool = usersRes.count ?? 0;
-
       const company = userRes.data?.company ?? null;
-      let issuePoolCount = 0;
+
+      let taskBacklog = 0;
+      let talentPool = 0;
       if (company) {
         const repoRes = await db.from('repositories').select('id').eq('owner', company);
         const repoIds = (repoRes.data ?? []).map((r: { id: string }) => r.id);
         if (repoIds.length > 0) {
-          const poolRes = await db
+          const scopedTasks = await db
             .from('tasks')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'open')
             .in('repository_id', repoIds);
-          issuePoolCount = poolRes.count ?? 0;
+          taskBacklog = scopedTasks.count ?? 0;
+          const scopedClaims = await db
+            .from('claims')
+            .select('user_id')
+            .in('task_id', repoIds)
+            .eq('status', 'active')
+            .gt('expires_at', new Date().toISOString());
+          if (scopedClaims.data) {
+            const uniqueDevs = new Set((scopedClaims.data as any[]).map((c) => c.user_id));
+            talentPool = uniqueDevs.size;
+          }
         }
       }
 
       return {
         walletLabel: 'Escrow Vault',
         walletValue: formatBalance(balance),
-        walletSubtext: '$14,200 locked in bounties',
+        walletSubtext: balance > 0 ? 'Funds held in escrow' : 'No transactions yet',
         walletHref: '/dashboard/business?tab=billing',
         counts: {
           'Tasks Backlog': String(taskBacklog),
           'Talent Pool': String(talentPool),
-          'Issue Pool': String(issuePoolCount),
+          'Issue Pool': '0',
         },
       };
     } catch {
@@ -216,14 +224,15 @@ export async function getDeveloperDashboard(userId: string) {
   const user = profile?.user ?? null;
   const wallet = profile?.wallet ?? null;
   const walletBalance = wallet?.available_balance ?? 0;
-  const displayName = user?.github_handle || user?.username || user?.email?.split('@')[0] || 'Developer';
-  const githubHandle = user?.github_handle || user?.github_id || null;
+  const cleanHandle = cleanGithubHandle(user?.github_handle);
+  const displayName = cleanHandle || user?.username || user?.email?.split('@')[0] || 'Developer';
+  const githubHandle = cleanHandle;
 
   const stats = profile?.user
     ? {
-        reputationScore: String(98.4),
-        reputationBadge: 'TOP 2%',
-        reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
+        reputationScore: '0',
+        reputationBadge: 'NEW',
+        reputationFooter: 'Reputation not yet calculated',
         verifiedContributions: String(profile.contributions_count),
         contributionsFooter:
           contributions.length > 0
@@ -292,44 +301,33 @@ export interface EscrowDisbursal {
 
 export function getWorkspaceMetrics(): WorkspaceMetric[] {
   return [
-    { label: 'Active Engineering Bounties', value: '8', subtext: '4 in progress, 4 accepting bids', highlight: true },
-    { label: 'Vetted Talent Pool', value: '42', subtext: 'Cryptographically certified contributors' },
-    { label: 'Escrow Vault Secured', value: '$32,500', subtext: '100% smart contract collateralized' },
-    { label: 'Avg PR Merge Velocity', value: '4.2 hrs', subtext: 'Automated verification test pass' },
+    { label: 'Active Engineering Bounties', value: '—', subtext: '4 in progress, 4 accepting bids', highlight: true },
+    { label: 'Vetted Talent Pool', value: '—', subtext: 'Certified contributors' },
+    { label: 'Escrow Vault Secured', value: '—', subtext: 'Held in escrow' },
+    { label: 'Avg PR Merge Velocity', value: '—', subtext: 'Automated verification test pass' },
   ];
 }
 
 export function getBacklogTasks(): BacklogTask[] {
-  return [
-    { id: 'task-b1', title: 'Next.js 16 Turbopack Bundle Analyzer & Cache Optimizer', repo: 'enterprise/core-runtime', budget: '$1,200 USDC', applicantsCount: 3, status: 'Active', assignee: 'Alex Rivers', priority: 'Critical', targetRelease: 'v0.2.0-rc1' },
-    { id: 'task-b2', title: 'Zero-Knowledge Proof Merkle Tree Verification Engine', repo: 'enterprise/zk-contracts', budget: '$2,500 USDC', applicantsCount: 6, status: 'Open for Bids', priority: 'High', targetRelease: 'v0.2.0' },
-    { id: 'task-b3', title: 'Automated Pull Request Proof-of-Work Evidence Auditor', repo: 'enterprise/audit-suite', budget: '$950 USDC', applicantsCount: 1, status: 'Reviewing', assignee: 'Alex Rivers', priority: 'High', targetRelease: 'v0.1.9' },
-    { id: 'task-b4', title: 'Multi-Region Distributed SQLite Sync & LibSQL Replica Gate', repo: 'enterprise/storage-mesh', budget: '$3,200 USDC', applicantsCount: 0, status: 'Queued', priority: 'Standard', targetRelease: 'v0.3.0' },
-  ];
+  return [];
 }
 
 export function getTalentPool(): TalentContributor[] {
-  return [
-    { id: 'dev-01', name: 'Alex Rivers', githubHandle: '@alexrivers-gig', reputation: 98.4, mergedPRs: 24, specialties: ['Next.js 16', 'React 19', 'HMAC Auth', 'TypeScript'], status: 'Assigned' },
-    { id: 'dev-02', name: 'Elena Rostova', githubHandle: '@erostova-crypto', reputation: 99.1, mergedPRs: 38, specialties: ['Rust', 'ZK-SNARKs', 'Elliptic Curve Cryptography'], status: 'Top Contributor' },
-    { id: 'dev-03', name: 'Marcus Chen', githubHandle: '@mchen-sys', reputation: 96.8, mergedPRs: 19, specialties: ['Distributed Systems', 'Go', 'LibSQL / SQLite'], status: 'Available' },
-    { id: 'dev-04', name: 'Priya Patel', githubHandle: '@ppatel-cloud', reputation: 97.5, mergedPRs: 31, specialties: ['Security Auditing', 'CI/CD Pipelines', 'Docker / K8s'], status: 'Available' },
-  ];
+  return [];
 }
 
 export function getRecentDisbursals(): EscrowDisbursal[] {
-  return [
-    { id: 'dis-882', date: '2026-09-12', recipient: 'Alex Rivers', taskTitle: 'Implement HMAC-SHA256 Session Middleware Gate', amount: '$1,500 USDC', status: 'Settled', txHash: '0x8f2a...4b19' },
-    { id: 'dis-879', date: '2026-09-10', recipient: 'Elena Rostova', taskTitle: 'Circuit Verification Module for Proof Generation', amount: '$2,500 USDC', status: 'Settled', txHash: '0x4d19...3c22' },
-    { id: 'dis-865', date: '2026-09-08', recipient: 'Alex Rivers', taskTitle: 'Migrate Client Auth State to Async HTTP-Only Cookies', amount: '$1,200 USDC', status: 'Settled', txHash: '0x3c7e...9a42' },
-    { id: 'dis-851', date: '2026-09-02', recipient: 'Marcus Chen', taskTitle: 'High-Concurrency Database Connection Pooling Engine', amount: '$1,800 USDC', status: 'Settled', txHash: '0x9a7b...8821' },
-  ];
+  return [];
 }
 
 export interface BusinessDashboard {
   displayName: string;
   displayEmail: string;
   githubHandle?: string | null;
+  company?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  avatar_url?: string | null;
   metrics: WorkspaceMetric[];
   backlogTasks: BacklogTask[];
   talentPool: TalentContributor[];
@@ -346,19 +344,52 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
 
   let githubHandle: string | null = null;
   let openTasks: Task[] = [];
+  let displayName = '';
+  let displayEmail = '';
+  let company: string | null = null;
+  let bio: string | null = null;
+  let location: string | null = null;
+  let avatar_url: string | null = null;
 
   if (client) {
     try {
-      // getUser and the task list are independent: resolve in parallel.
-      const [userRes, tasks] = await Promise.all([
-        client.auth.getUser(),
-        getOpenTasks({}, client),
-      ]);
+      // R2c: Fetch user and profile first (sequentially), then tasks scoped to company repos.
+      const userRes = await client.auth.getUser();
       const user = userRes.data?.user;
       if (user) {
-        githubHandle = user.user_metadata?.github_handle || user.user_metadata?.github_id || null;
+        githubHandle = cleanGithubHandle(user.user_metadata?.github_handle || user.user_metadata?.user_name);
+        if (user.email) displayEmail = user.email;
+
+        // Fetch user profile row
+        const { data: userRow } = await client
+          .from("users")
+          .select("username, company, bio, location, avatar_url, github_handle")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (userRow) {
+          if (userRow.username) displayName = userRow.username;
+          company = userRow.company || null;
+          bio = userRow.bio || null;
+          location = userRow.location || null;
+          avatar_url = userRow.avatar_url || null;
+          const rowHandle = cleanGithubHandle(userRow.github_handle);
+          if (rowHandle) githubHandle = rowHandle;
+        }
+
+        // Only fetch tasks for this company's repositories; if no company, leave openTasks empty.
+        if (company) {
+          const repos = await getRepositories({ owner: company }, client);
+          const repoIds = repos.map((r) => r.id);
+          if (repoIds.length > 0) {
+            // Fetch tasks for each repo and flatten; use first repo as filter entry point
+            const taskResults = await Promise.all(
+              repoIds.map((repoId) => getOpenTasks({ repositoryId: repoId }, client))
+            );
+            openTasks = taskResults.flat();
+          }
+        }
       }
-      openTasks = tasks;
     } catch {
       // fall through to fallback
     }
@@ -378,13 +409,14 @@ export async function getBusinessDashboard(): Promise<BusinessDashboard | null> 
         }))
       : [];
 
-  const displayName = 'Enterprise Sponsor';
-  const displayEmail = 'biz@gig.dev';
-
   return {
-    displayName,
+    displayName: displayName || 'Business Account',
     displayEmail,
     githubHandle,
+    company,
+    bio,
+    location,
+    avatar_url,
     metrics: getWorkspaceMetrics(),
     backlogTasks,
     talentPool: getTalentPool(),
@@ -482,7 +514,7 @@ function buildEmptyIssuePool(
 ): IssuePoolData {
   const displayName =
     name ||
-    (role === 'business' ? 'Enterprise Sponsor' : 'Developer');
+    (role === 'business' ? 'Business Account' : 'Developer');
   return {
     role,
     displayName,
@@ -567,7 +599,8 @@ export async function getIssuePoolData(
         getClaimsByUser(userId, client),
         getSubmissionsByUser(userId, client),
       ]);
-      const active = claims.filter((c) => c.status === 'active');
+      const nowIso = new Date().toISOString();
+      const active = claims.filter((c) => c.status === 'active' && (!c.expires_at || c.expires_at > nowIso));
       claimedByMe = active.length;
       claimedTotal = claimedByMe;
       active.forEach((c) => claimedTaskIds.add(c.task_id));
@@ -593,7 +626,7 @@ export async function getIssuePoolData(
     const displayName =
       user?.username ||
       user?.email?.split('@')[0] ||
-      (role === 'business' ? 'Enterprise Sponsor' : 'Developer');
+      (role === 'business' ? 'Business Account' : 'Developer');
 
     const recommended: string[] =
       role === 'business'

@@ -30,10 +30,10 @@ export interface SidebarStats {
   counts?: Record<string, string>;
 }
 
-const DEV_FALLBACK_NAME = 'Alex Rivers';
-const BIZ_FALLBACK_NAME = 'Enterprise Sponsor';
-const DEV_FALLBACK_EMAIL = 'dev@gig.dev';
-const BIZ_FALLBACK_EMAIL = 'biz@gig.dev';
+const DEV_FALLBACK_NAME = 'Developer';
+const BIZ_FALLBACK_NAME = 'Business Sponsor';
+const DEV_FALLBACK_EMAIL = '';
+const BIZ_FALLBACK_EMAIL = '';
 
 function isUsableEmail(email: unknown): email is string {
   return (
@@ -71,15 +71,15 @@ export function normalizeHandle(
 
 function getDeveloperStatsFallback() {
   return {
-    reputationScore: '98.4',
-    reputationBadge: 'TOP 2%',
-    reputationFooter: '0\u2013100 Weighted Score \u00b7 Top 2% Network',
-    verifiedContributions: '24',
-    contributionsFooter: 'Across 6 production open-source repositories',
-    lockedTasks: '2',
-    lockedFooter: '\u20b94,700 in locked escrow \u00b7 48h lock active',
-    walletBalance: '\u20b94,850',
-    walletFooter: 'Ready for instant UPI bank withdrawal (Min \u20b9500)',
+    reputationScore: '0',
+    reputationBadge: 'NEW',
+    reputationFooter: 'Reputation score based on verified PR contributions',
+    verifiedContributions: '0',
+    contributionsFooter: 'Verified open-source contributions',
+    lockedTasks: '0',
+    lockedFooter: 'Locked escrow',
+    walletBalance: '\u20b90',
+    walletFooter: 'Ready for UPI bank withdrawal (Min \u20b9500)',
   };
 }
 
@@ -87,20 +87,20 @@ export function getSidebarStatsSync(role: DashboardRole): SidebarStats {
   if (role === 'business') {
     return {
       walletLabel: 'Escrow Vault',
-      walletValue: '$32,500.00',
-      walletSubtext: '$14,200 locked in bounties',
+      walletValue: '$0',
+      walletSubtext: 'No transactions yet',
       walletHref: '/dashboard/business?tab=billing',
-      counts: { 'Tasks Backlog': '8', 'Talent Pool': '42' },
+      counts: { 'Tasks Backlog': '0', 'Talent Pool': '0' },
     };
   }
-  const dev = getDeveloperStatsFallback();
   return {
     walletLabel: 'GIG Wallet',
-    walletValue: '\u20b94,850.00',
-    walletSubtext: 'Above \u20b9500 UPI threshold',
+    walletValue: '₹0',
+    walletSubtext: 'No transactions yet',
     walletHref: '/dashboard/developer?tab=wallet',
-    reputationValue: dev.reputationScore,
-    reputationBadge: dev.reputationBadge,
-    counts: { Tasks: dev.lockedTasks, 'Verified PRs': dev.verifiedContributions },
+    reputationScore: 0,
+    reputationValue: '0',
+    reputationBadge: 'NEW',
+    counts: { Tasks: '0', 'Verified PRs': '0' },
   };
 }

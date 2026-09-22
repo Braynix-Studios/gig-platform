@@ -31,7 +31,7 @@ export async function GET() {
     const userId = session.userId;
 
     // Get wallet
-    const wallet = await getWalletByUser(userId);
+    const wallet = await getWalletByUser(userId, supabase);
     if (!wallet) {
       return NextResponse.json(
         { error: "Wallet not found" },
@@ -40,7 +40,7 @@ export async function GET() {
     }
 
     // Get transactions (reuse the wallet id — avoids a second wallets read)
-    const walletTransactions = await getWalletTransactions(userId, null, wallet.id);
+    const walletTransactions = await getWalletTransactions(userId, supabase, wallet.id);
 
     // Map to DevTransaction format
     const transactions = walletTransactions

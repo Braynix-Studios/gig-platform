@@ -5,7 +5,10 @@ import { getSession } from '@/lib/session';
 import {
   claimTask,
   getTaskById,
+  getRepositoryById,
   getActiveClaimForTask,
+  getActiveClaimForUserAndTask,
+  getLatestSubmissionForClaim,
   submitPR,
 } from '@/lib/db-operations';
 
@@ -27,6 +30,9 @@ export async function claimIssueAction(
   }
   if (session.role !== 'developer') {
     return { ok: false, message: 'Only developers can claim issues.' };
+  }
+  if (!session.githubId) {
+    return { ok: false, message: 'Connect your GitHub account before claiming issues.' };
   }
 
   const taskId = formData.get('taskId');
@@ -81,12 +87,41 @@ export async function submitPrAction(
     };
   }
 
-  const claim = await getActiveClaimForTask(taskId);
-  if (!claim || claim.user_id !== session.userId) {
+  // Parse PR URL to extract owner/repo (R1f)
+  const prMatch = url.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/);
+  if (!prMatch) {
+    return { ok: false, message: 'Could not parse GitHub PR URL.' };
+  }
+  const [, prOwner, prRepo] = prMatch;
+
+  // Load task and repository to validate PR belongs to task repo
+  const task = await getTaskById(taskId);
+  if (!task) return { ok: false, message: 'Task not found.' };
+  const repo = await getRepositoryById(task.repository_id);
+  if (!repo) return { ok: false, message: 'Task repository not found.' };
+
+  if (prOwner.toLowerCase() !== repo.owner.toLowerCase() || prRepo.toLowerCase() !== repo.name.toLowerCase()) {
+    return { ok: false, message: `PR must belong to the task repository: ${repo.owner}/${repo.name}` };
+  }
+
+  const claim = await getActiveClaimForUserAndTask(taskId, session.userId);
+  if (!claim) {
     return { ok: false, message: 'Claim this issue first before submitting a PR.' };
   }
 
   const prNumber = url.match(/\/pull\/(\d+)/)?.[1] ?? null;
+
+  // Check for existing submissions for this claim to determine revision lineage
+  const previousSubmission = await getLatestSubmissionForClaim(claim.id);
+  if (previousSubmission && previousSubmission.pr_status === 'pending') {
+    return {
+      ok: false,
+      message: 'You already have an active submission pending review for this claim.',
+    };
+  }
+
+  const nextRevision = previousSubmission ? (previousSubmission.revision_number ?? 1) + 1 : 1;
+  const parentId = previousSubmission ? previousSubmission.id : null;
 
   const submission = await submitPR({
     task_id: taskId,
@@ -94,6 +129,8 @@ export async function submitPrAction(
     claim_id: claim.id,
     pr_url: url,
     pr_number: prNumber,
+    revision_number: nextRevision,
+    parent_submission_id: parentId,
   });
   if (!submission) {
     return { ok: false, message: 'Submission failed. Please try again.' };
@@ -102,6 +139,8 @@ export async function submitPrAction(
   revalidatePath('/dashboard/developer', 'page');
   return {
     ok: true,
-    message: prNumber ? `PR #${prNumber} submitted for verification.` : 'PR submitted for verification.',
+    message: prNumber
+      ? `PR #${prNumber} (rev ${nextRevision}) submitted for verification.`
+      : `PR (rev ${nextRevision}) submitted for verification.`,
   };
 }
